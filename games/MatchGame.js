@@ -1,5 +1,5 @@
 // =====================================================================
-// GAME MENCOCOKKAN (DRAG & DROP)
+// GAME MENCOCOKKAN (DRAG & DROP) — modern playful theme.
 // Menggunakan Pointer Events agar berjalan di mouse maupun layar sentuh.
 // Mode alternatif: ketuk item kiri lalu ketuk kotak kanan (untuk HP kecil).
 // Catatan: helper `Icon` dan `shuffleArray` berasal dari index.html dan
@@ -151,157 +151,115 @@ function MatchGame({ game, currentUser, onFinish, onExit, onReplay }) {
         onExit();
     };
 
-    const formatTime = s => `${Math.floor(s / 60).toString().padStart(2, "0")}:${(s % 60).toString().padStart(2, "0")}`;
-    const stars = scoreToStars(score);
+    const theme = (typeof gameTheme === "function" ? gameTheme("match") : { grad: "from-violet-500 to-fuchsia-500" });
     const timeWarning = timeLeft <= 15 && !finished;
 
     return (
-        <div className="min-h-screen bg-gradient-to-b from-violet-100 via-slate-100 to-slate-100 flex flex-col select-none">
-            {/* HEADER */}
-            <header className="bg-violet-700 text-white px-4 py-3 flex items-center justify-between shadow-md sticky top-0 z-40">
-                <div className="flex items-center gap-3 min-w-0">
-                    <button onClick={handleExit} className="p-1.5 rounded-lg bg-violet-600 hover:bg-violet-500 transition-colors cursor-pointer" title="Kembali">
-                        <Icon name="chevron-left" size={20} />
-                    </button>
-                    <div className="min-w-0">
-                        <p className="text-[10px] uppercase tracking-wider text-violet-200">🎮 Mencocokkan · {game.mapel}</p>
-                        <h1 className="font-bold text-sm sm:text-base truncate">{game.title}</h1>
-                    </div>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                    <div className="bg-violet-600 px-3 py-1.5 rounded-lg text-xs font-bold">⭐ {score}</div>
-                    <div className={`px-3 py-1.5 rounded-lg text-xs font-bold font-mono ${timeWarning ? "bg-red-500 animate-pulse" : "bg-violet-600"}`}>
-                        ⏱ {formatTime(timeLeft)}
-                    </div>
-                </div>
-            </header>
+        <div className="min-h-screen bg-[#f3f0ff] flex flex-col select-none relative overflow-hidden">
+            <div className="pointer-events-none absolute -top-20 -left-20 w-72 h-72 rounded-full bg-fuchsia-300/40 blur-3xl"></div>
+            <div className="pointer-events-none absolute top-40 -right-24 w-80 h-80 rounded-full bg-violet-300/40 blur-3xl"></div>
+            <div className="pointer-events-none absolute bottom-0 left-1/3 w-72 h-72 rounded-full bg-amber-200/50 blur-3xl"></div>
+
+            <GameHud theme={{ ...theme, label: "Mencocokkan", emoji: "🧩" }} mapel={game.mapel} title={game.title} score={score} timeLeft={timeLeft} timeWarning={timeWarning} onExit={handleExit} />
 
             {/* PROGRESS */}
-            <div className="max-w-5xl mx-auto w-full px-4 pt-4">
-                <div className="flex justify-between text-xs font-bold text-slate-600 mb-1">
-                    <span>Cocok: {matchedCount}/{total}</span>
-                    <span className={wrongCount > 0 ? "text-red-500" : ""}>Salah: {wrongCount}</span>
+            <div className="relative max-w-5xl mx-auto w-full px-3 sm:px-5 pt-4">
+                <div className="rounded-3xl border border-white/60 bg-white/70 backdrop-blur-xl shadow-lg shadow-violet-900/5 p-3.5 sm:p-4">
+                    <div className="flex items-center justify-between gap-2 text-xs font-black">
+                        <span className="px-2.5 py-1.5 rounded-full bg-violet-100 text-violet-700">🧩 Cocok {matchedCount}/{total}</span>
+                        <span className="font-black text-slate-400">{progress}%</span>
+                        <span className={`px-2.5 py-1.5 rounded-full ${wrongCount > 0 ? "bg-rose-100 text-rose-600" : "bg-slate-100 text-slate-400"}`}>❌ {wrongCount}</span>
+                    </div>
+                    <div className="mt-2.5 h-3.5 rounded-full bg-slate-100 overflow-hidden border border-slate-200/70">
+                        <div className={`h-full rounded-full bg-gradient-to-r ${theme.grad} transition-all duration-500`} style={{ width: `${progress}%` }}></div>
+                    </div>
+                    <p className="text-[11px] text-slate-500 mt-2 text-center font-semibold">
+                        👆 Seret kartu kiri ke kotak yang cocok di kanan <span className="text-slate-300">•</span> atau ketuk kartu lalu ketuk kotaknya
+                    </p>
                 </div>
-                <div className="w-full bg-white rounded-full h-3 border border-slate-200 overflow-hidden">
-                    <div className="h-full bg-gradient-to-r from-violet-500 to-emerald-500 transition-all duration-500" style={{ width: `${progress}%` }}></div>
-                </div>
-                <p className="text-[11px] text-slate-500 mt-2 text-center">
-                    Seret kartu di kiri ke kotak yang cocok di kanan, atau ketuk kartu lalu ketuk kotaknya.
-                </p>
             </div>
 
             {/* PAPAN PERMAINAN */}
-            <main className="flex-1 max-w-5xl mx-auto w-full p-4 grid grid-cols-2 gap-3 sm:gap-6 items-start">
+            <main className="relative flex-1 max-w-5xl mx-auto w-full p-3 sm:p-5 grid grid-cols-2 gap-3 sm:gap-5 items-start">
                 {/* KOLOM KIRI: kartu yang diseret */}
-                <div className="space-y-3">
-                    {leftItems.map(item => {
-                        const isMatched = !!matched[item.id];
-                        const isSelected = selected === item.id;
-                        const isDragging = drag && drag.id === item.id;
-                        return (
-                            <div
-                                key={item.id}
-                                onPointerDown={(e) => handlePointerDown(e, item)}
-                                onPointerMove={handlePointerMove}
-                                onPointerUp={handlePointerUp}
-                                onPointerCancel={handlePointerUp}
-                                style={{ touchAction: "none" }}
-                                className={`rounded-2xl px-3 py-3 sm:px-4 sm:py-4 text-sm sm:text-base font-bold text-center border-2 shadow-sm transition-all
-                                    ${isMatched
-                                        ? "bg-emerald-50 border-emerald-200 text-emerald-400 line-through opacity-60"
-                                        : isSelected
-                                            ? "bg-amber-100 border-amber-400 text-amber-900 ring-4 ring-amber-200 scale-[1.03] cursor-grab"
-                                            : "bg-white border-violet-200 text-slate-800 hover:border-violet-400 hover:shadow-md cursor-grab active:cursor-grabbing"}
-                                    ${isDragging ? "opacity-30" : ""}`}
-                            >
-                                {isMatched ? "✓ " : ""}{item.text}
-                            </div>
-                        );
-                    })}
+                <div>
+                    <p className="text-[11px] font-black uppercase tracking-widest text-violet-500 mb-2 px-1">🎴 Kartu Pilihan</p>
+                    <div className="space-y-2.5">
+                        {leftItems.map(item => {
+                            const isMatched = !!matched[item.id];
+                            const isSelected = selected === item.id;
+                            const isDragging = drag && drag.id === item.id;
+                            return (
+                                <div
+                                    key={item.id}
+                                    onPointerDown={(e) => handlePointerDown(e, item)}
+                                    onPointerMove={handlePointerMove}
+                                    onPointerUp={handlePointerUp}
+                                    onPointerCancel={handlePointerUp}
+                                    style={{ touchAction: "none" }}
+                                    className={`game-card-in relative overflow-hidden rounded-3xl px-3 py-3.5 sm:px-4 sm:py-4 text-sm sm:text-base font-black text-center border-2 transition-all duration-200
+                                        ${isMatched
+                                            ? "bg-emerald-50/80 border-emerald-200 text-emerald-400 line-through opacity-60"
+                                            : isSelected
+                                                ? `bg-white border-transparent text-slate-900 shadow-xl shadow-amber-400/30 scale-[1.04] cursor-grab ring-4 ring-amber-300 game-glow`
+                                                : "bg-white/90 backdrop-blur border-white text-slate-800 shadow-lg shadow-slate-900/5 hover:-translate-y-0.5 hover:shadow-xl hover:border-violet-300 cursor-grab active:cursor-grabbing"}
+                                        ${isDragging ? "opacity-30 scale-95" : ""}`}
+                                >
+                                    {!isMatched && <span className={`absolute left-0 top-0 bottom-0 w-1.5 bg-gradient-to-b ${theme.grad}`}></span>}
+                                    {isMatched ? "✓ " : ""}{item.text}
+                                </div>
+                            );
+                        })}
+                    </div>
                 </div>
 
                 {/* KOLOM KANAN: kotak tujuan */}
-                <div className="space-y-3">
-                    {rightItems.map(item => {
-                        const isMatched = !!matched[item.id];
-                        const isHover = hoverTarget === item.id && !isMatched;
-                        const isShake = shakeId === item.id;
-                        const isPop = popId === item.id;
-                        const leftText = isMatched ? pairs[item.id].left : null;
-                        return (
-                            <div
-                                key={item.id}
-                                data-drop-id={item.id}
-                                onClick={() => selected !== null && attemptMatch(selected, item.id)}
-                                className={`rounded-2xl px-3 py-3 sm:px-4 sm:py-4 text-xs sm:text-sm border-2 border-dashed min-h-[56px] flex flex-col justify-center transition-all
-                                    ${isMatched
-                                        ? "bg-emerald-500 border-emerald-500 text-white shadow-md"
-                                        : isHover || (selected !== null)
-                                            ? "bg-violet-50 border-violet-500 text-slate-700 cursor-pointer"
-                                            : "bg-white/70 border-slate-300 text-slate-700"}
-                                    ${isHover ? "scale-[1.03] ring-4 ring-violet-200" : ""}
-                                    ${isShake ? "game-shake border-red-400 bg-red-50" : ""}
-                                    ${isPop ? "game-pop" : ""}`}
-                            >
-                                {isMatched && <span className="text-[10px] font-black uppercase tracking-wide text-emerald-100 mb-0.5">{leftText}</span>}
-                                <span className={isMatched ? "font-semibold" : ""}>{item.text}</span>
-                            </div>
-                        );
-                    })}
+                <div>
+                    <p className="text-[11px] font-black uppercase tracking-widest text-fuchsia-500 mb-2 px-1">🎯 Kotak Pasangan</p>
+                    <div className="space-y-2.5">
+                        {rightItems.map(item => {
+                            const isMatched = !!matched[item.id];
+                            const isHover = hoverTarget === item.id && !isMatched;
+                            const isShake = shakeId === item.id;
+                            const isPop = popId === item.id;
+                            const leftText = isMatched ? pairs[item.id].left : null;
+                            return (
+                                <div
+                                    key={item.id}
+                                    data-drop-id={item.id}
+                                    onClick={() => selected !== null && attemptMatch(selected, item.id)}
+                                    className={`rounded-3xl px-3 py-3.5 sm:px-4 sm:py-4 text-xs sm:text-sm border-2 min-h-[62px] flex flex-col justify-center transition-all duration-200
+                                        ${isMatched
+                                            ? `bg-gradient-to-r ${theme.grad} border-transparent text-white shadow-lg`
+                                            : isHover
+                                                ? "bg-white border-violet-500 shadow-xl scale-[1.04] ring-4 ring-violet-200 cursor-pointer"
+                                                : (selected !== null)
+                                                    ? "bg-violet-50/80 border-violet-300 border-dashed text-slate-700 cursor-pointer"
+                                                    : "bg-white/60 backdrop-blur border-dashed border-slate-300 text-slate-600"}
+                                        ${isShake ? "game-shake border-rose-400 bg-rose-50" : ""}
+                                        ${isPop ? "game-pop" : ""}`}
+                                >
+                                    {isMatched && <span className="text-[10px] font-black uppercase tracking-widest text-white/85 mb-0.5">✓ {leftText}</span>}
+                                    <span className={isMatched ? "font-bold" : "font-semibold"}>{item.text}</span>
+                                </div>
+                            );
+                        })}
+                    </div>
                 </div>
             </main>
 
             {/* KARTU BAYANGAN SAAT DISERET */}
             {drag && (
                 <div
-                    className="fixed z-[90] pointer-events-none rounded-2xl px-4 py-4 text-sm sm:text-base font-bold text-center bg-violet-600 text-white shadow-2xl border-2 border-violet-300 rotate-2"
+                    className={`fixed z-[90] pointer-events-none rounded-3xl px-4 py-4 text-sm sm:text-base font-black text-center text-white shadow-2xl rotate-3 bg-gradient-to-r ${theme.grad} border-2 border-white/60`}
                     style={{ left: drag.x - drag.dx, top: drag.y - drag.dy, width: drag.w }}
                 >
                     {drag.text}
                 </div>
             )}
 
-            {/* HASIL */}
             {finished && (
-                <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
-                    <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-6 text-center animate-in">
-                        <div className="text-5xl mb-2">{matchedCount === total ? "🎉" : "⏰"}</div>
-                        <h2 className="text-xl font-black text-slate-800">
-                            {matchedCount === total ? "Hebat, semua cocok!" : "Waktu habis!"}
-                        </h2>
-                        <p className="text-xs text-slate-500 mt-1">{currentUser.name}</p>
-
-                        <div className="flex justify-center gap-1 my-4 text-3xl">
-                            {[1, 2, 3].map(i => <span key={i} className={i <= stars ? "" : "grayscale opacity-30"}>⭐</span>)}
-                        </div>
-
-                        <div className="text-5xl font-black text-violet-600 mb-4">{score}</div>
-
-                        <div className="grid grid-cols-3 gap-2 text-xs mb-6">
-                            <div className="bg-emerald-50 rounded-xl p-2 border border-emerald-100">
-                                <p className="text-emerald-600 font-bold text-lg">{matchedCount}</p>
-                                <p className="text-slate-500">Cocok</p>
-                            </div>
-                            <div className="bg-red-50 rounded-xl p-2 border border-red-100">
-                                <p className="text-red-500 font-bold text-lg">{wrongCount}</p>
-                                <p className="text-slate-500">Salah</p>
-                            </div>
-                            <div className="bg-slate-50 rounded-xl p-2 border border-slate-100">
-                                <p className="text-slate-700 font-bold text-lg">{formatTime(Math.round((Date.now() - startedAt.current) / 1000))}</p>
-                                <p className="text-slate-500">Waktu</p>
-                            </div>
-                        </div>
-
-                        <div className="flex gap-2">
-                            <button onClick={onExit} className="flex-1 py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-bold transition-colors cursor-pointer">
-                                Kembali
-                            </button>
-                            <button onClick={onReplay} className="flex-1 py-3 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-sm font-bold transition-colors shadow-sm cursor-pointer">
-                                🔁 Main Lagi
-                            </button>
-                        </div>
-                    </div>
-                </div>
+                <GameResultModal score={score} benar={matchedCount} salah={wrongCount} durasiDetik={Math.round((Date.now() - startedAt.current) / 1000)} playerName={currentUser.name} finishedLabel={matchedCount === total ? "Hebat, semua cocok! 🎉" : "Waktu habis! ⏰"} onExit={onExit} onReplay={onReplay} />
             )}
         </div>
     );

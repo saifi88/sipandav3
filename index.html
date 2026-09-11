@@ -16,11 +16,29 @@
         .animate-in { animation: fadeIn 0.2s ease-out forwards, zoomIn 0.2s ease-out forwards; }
         .exam-mode { user-select: none; -webkit-user-select: none; -ms-user-select: none; }
 
-        /* Animasi untuk game */
+        /* Animasi untuk game — modern playful theme */
         @keyframes gameShake { 0%, 100% { transform: translateX(0); } 20%, 60% { transform: translateX(-6px); } 40%, 80% { transform: translateX(6px); } }
         @keyframes gamePop { 0% { transform: scale(1); } 40% { transform: scale(1.08); } 100% { transform: scale(1); } }
+        @keyframes gameFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-12px); } }
+        @keyframes gameCardIn { from { opacity: 0; transform: translateY(14px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+        @keyframes gameStarPop { 0% { transform: scale(0) rotate(-30deg); opacity: 0; } 60% { transform: scale(1.35) rotate(8deg); opacity: 1; } 100% { transform: scale(1) rotate(0); opacity: 1; } }
+        @keyframes gameConfetti { 0% { transform: translateY(-10%) rotate(0); opacity: 1; } 100% { transform: translateY(110vh) rotate(540deg); opacity: 0; } }
+        @keyframes gameGlow { 0%, 100% { box-shadow: 0 0 0 0 rgba(167,139,250,0.55); } 50% { box-shadow: 0 0 0 10px rgba(167,139,250,0); } }
+        @keyframes gameGradient { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
         .game-shake { animation: gameShake 0.45s ease-in-out; }
         .game-pop { animation: gamePop 0.5s ease-out; }
+        .game-float { animation: gameFloat 5s ease-in-out infinite; }
+        .game-card-in { animation: gameCardIn 0.45s cubic-bezier(0.22,1,0.36,1) both; }
+        .game-star-pop { animation: gameStarPop 0.55s cubic-bezier(0.22,1,0.36,1) both; }
+        .game-glow { animation: gameGlow 1.8s ease-out infinite; }
+        .game-gradient-text { background-size: 200% auto; animation: gameGradient 5s ease infinite; }
+        .game-confetti-piece { position: absolute; top: -5%; animation: gameConfetti linear infinite; }
+        @keyframes balloonRise { from { transform: translateY(62vh); } to { transform: translateY(-32vh); } }
+        @keyframes balloonWobble { 0%, 100% { margin-left: 0; } 25% { margin-left: -8px; } 75% { margin-left: 8px; } }
+        @keyframes balloonPop { 0% { transform: scale(1); opacity: 1; } 100% { transform: scale(2.2); opacity: 0; } }
+        .game-balloon { animation: balloonRise linear infinite; }
+        .game-balloon-wobble { animation: balloonWobble 0.35s ease-in-out; }
+        .game-balloon-pop { animation: balloonPop 0.35s ease-out forwards; }
     </style>
 </head>
 <body class="bg-slate-100 font-sans text-slate-800">
@@ -32,6 +50,11 @@
     <script type="text/babel" src="games/MatchGame.js"></script>
     <script type="text/babel" src="games/MemoryGame.js"></script>
     <script type="text/babel" src="games/QuizRushGame.js"></script>
+    <script type="text/babel" src="games/BalloonPopGame.js"></script>
+    <script type="text/babel" src="games/ScrambleGame.js"></script>
+    <script type="text/babel" src="games/SnakeLadderGame.js"></script>
+    <script type="text/babel" src="games/TrueFalseGame.js"></script>
+    <script type="text/babel" src="games/HangmanGame.js"></script>
     <script type="text/babel" src="games/GameHub.js"></script>
 
     <script type="text/babel">
@@ -459,7 +482,57 @@
                                 onReplay={replayGame}
                             />
                         )}
-                        {view === 'game' && activeGame && !['match', 'memory', 'quizrush'].includes(activeGame.type) && (
+                        {view === 'game' && activeGame && activeGame.type === 'balloon' && (
+                            <BalloonPopGame
+                                key={gamePlayKey}
+                                game={activeGame}
+                                currentUser={currentUser}
+                                onFinish={finishGame}
+                                onExit={exitGame}
+                                onReplay={replayGame}
+                            />
+                        )}
+                        {view === 'game' && activeGame && activeGame.type === 'scramble' && (
+                            <ScrambleGame
+                                key={gamePlayKey}
+                                game={activeGame}
+                                currentUser={currentUser}
+                                onFinish={finishGame}
+                                onExit={exitGame}
+                                onReplay={replayGame}
+                            />
+                        )}
+                        {view === 'game' && activeGame && activeGame.type === 'snake' && (
+                            <SnakeLadderGame
+                                key={gamePlayKey}
+                                game={activeGame}
+                                currentUser={currentUser}
+                                onFinish={finishGame}
+                                onExit={exitGame}
+                                onReplay={replayGame}
+                            />
+                        )}
+                        {view === 'game' && activeGame && activeGame.type === 'truefalse' && (
+                            <TrueFalseGame
+                                key={gamePlayKey}
+                                game={activeGame}
+                                currentUser={currentUser}
+                                onFinish={finishGame}
+                                onExit={exitGame}
+                                onReplay={replayGame}
+                            />
+                        )}
+                        {view === 'game' && activeGame && activeGame.type === 'hangman' && (
+                            <HangmanGame
+                                key={gamePlayKey}
+                                game={activeGame}
+                                currentUser={currentUser}
+                                onFinish={finishGame}
+                                onExit={exitGame}
+                                onReplay={replayGame}
+                            />
+                        )}
+                        {view === 'game' && activeGame && !['match', 'memory', 'quizrush', 'balloon', 'scramble', 'snake', 'truefalse', 'hangman'].includes(activeGame.type) && (
                             <MatchGame
                                 key={gamePlayKey}
                                 game={activeGame}
@@ -1490,7 +1563,7 @@
                         <h4 className="font-bold">Tambah / Update Game (manual + AI)</h4>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                             <div><label className="text-xs font-bold">ID (kosongkan = otomatis)</label><input value={form.id} onChange={e => set('id', e.target.value)} className="w-full px-3 py-2 border rounded-xl text-sm" placeholder="match-mtk-02" /></div>
-                            <div><label className="text-xs font-bold">Tipe</label><select value={form.type} onChange={e => set('type', e.target.value)} className="w-full px-3 py-2 border rounded-xl text-sm"><option value="match">match</option><option value="memory">memory</option><option value="quizrush">quizrush</option></select></div>
+                            <div><label className="text-xs font-bold">Tipe</label><select value={form.type} onChange={e => set('type', e.target.value)} className="w-full px-3 py-2 border rounded-xl text-sm"><option value="match">match</option><option value="memory">memory</option><option value="quizrush">quizrush</option><option value="balloon">balloon</option><option value="scramble">scramble</option><option value="snake">snake</option><option value="truefalse">truefalse</option><option value="hangman">hangman</option></select></div>
                             <div><label className="text-xs font-bold">Mapel</label><select value={form.mapel} onChange={e => set('mapel', e.target.value)} className="w-full px-3 py-2 border rounded-xl text-sm">{MAPEL_LIST.map(m => <option key={m} value={m}>{m}</option>)}</select></div>
                             <div className="md:col-span-2"><label className="text-xs font-bold">Judul</label><input value={form.title} onChange={e => set('title', e.target.value)} className="w-full px-3 py-2 border rounded-xl text-sm" placeholder="Perkalian Cepat 2" /></div>
                             <div><label className="text-xs font-bold">Durasi (mnt)</label><input type="number" value={form.duration} onChange={e => set('duration', e.target.value)} className="w-full px-3 py-2 border rounded-xl text-sm" /></div>

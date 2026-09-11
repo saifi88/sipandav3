@@ -1,5 +1,5 @@
 // =====================================================================
-// GAME MEMORI: buka 2 kartu, cocokkan left<->right dari pairs yang sama.
+// GAME MEMORI (modern): buka 2 kartu, cocokkan left<->right.
 // Memakai kontrak onFinish yang sama dengan MatchGame (bonus-only).
 // =====================================================================
 
@@ -26,6 +26,9 @@ function MemoryGame({ game, currentUser, onFinish, onExit, onReplay }) {
 
     const matchedCount = Object.keys(found).length;
     const score = calcMatchScore(matchedCount, wrongCount, total);
+    const theme = (typeof gameTheme === "function" ? gameTheme("memory") : { grad: "from-cyan-500 to-indigo-500" });
+    const timeWarning = timeLeft <= 15 && !finished;
+    const progress = total > 0 ? Math.round((matchedCount / total) * 100) : 0;
 
     React.useEffect(() => {
         if (finished) return;
@@ -67,35 +70,51 @@ function MemoryGame({ game, currentUser, onFinish, onExit, onReplay }) {
         }
     };
 
+    const handleExit = () => {
+        if (!finished && matchedCount > 0 && !window.confirm("Keluar dari game? Progres tidak akan disimpan.")) return;
+        onExit();
+    };
+
     return (
-        <div className="min-h-screen bg-gradient-to-b from-violet-100 via-slate-100 to-slate-100 flex flex-col select-none">
-            <header className="bg-violet-700 text-white px-4 py-3 flex items-center justify-between shadow-md sticky top-0 z-40">
-                <div className="flex items-center gap-3 min-w-0">
-                    <button onClick={onExit} className="p-1.5 rounded-lg bg-violet-600 hover:bg-violet-500 cursor-pointer"><Icon name="chevron-left" size={20} /></button>
-                    <div className="min-w-0">
-                        <p className="text-[10px] uppercase tracking-wider text-violet-200">🃏 Memori · {game.mapel} · Bonus</p>
-                        <h1 className="font-bold text-sm sm:text-base truncate">{game.title}</h1>
-                    </div>
+        <div className="min-h-screen bg-[#f0f9ff] flex flex-col select-none relative overflow-hidden">
+            <div className="pointer-events-none absolute -top-20 -right-20 w-72 h-72 rounded-full bg-cyan-300/40 blur-3xl"></div>
+            <div className="pointer-events-none absolute top-1/3 -left-24 w-80 h-80 rounded-full bg-indigo-300/40 blur-3xl"></div>
+            <GameHud theme={{ ...theme, label: "Memori", emoji: "🃏" }} mapel={game.mapel} title={game.title} score={score} timeLeft={timeLeft} timeWarning={timeWarning} onExit={handleExit} />
+            <div className="relative max-w-3xl mx-auto w-full px-3 sm:px-5 pt-4">
+                <div className="flex items-center justify-center gap-2 text-xs font-black">
+                    <span className="px-3 py-1.5 rounded-full bg-cyan-100 text-cyan-700">🃏 {matchedCount}/{total} pasangan</span>
+                    <span className="px-3 py-1.5 rounded-full bg-white border border-slate-200 text-slate-500">{progress}%</span>
+                    <span className={`px-3 py-1.5 rounded-full ${wrongCount ? "bg-rose-100 text-rose-600" : "bg-white text-slate-400 border border-slate-200"}`}>❌ {wrongCount}</span>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
-                    <div className="bg-violet-600 px-3 py-1.5 rounded-lg text-xs font-bold">⭐ {score}</div>
-                    <div className="bg-violet-600 px-3 py-1.5 rounded-lg text-xs font-bold font-mono">⏱ {formatGameTime(timeLeft)}</div>
+                <div className="mt-2.5 h-3 rounded-full bg-white border border-slate-200 overflow-hidden">
+                    <div className={`h-full rounded-full bg-gradient-to-r ${theme.grad} transition-all duration-500`} style={{ width: `${progress}%` }}></div>
                 </div>
-            </header>
-            <p className="text-[11px] text-slate-500 mt-3 text-center px-4">Buka dua kartu. Cocokkan istilah dengan artinya. Cocok: {matchedCount}/{total} · Salah: {wrongCount}</p>
-            <main className="flex-1 max-w-3xl mx-auto w-full p-4 grid grid-cols-3 sm:grid-cols-4 gap-2 sm:gap-3 items-start">
+            </div>
+            <main className="relative flex-1 max-w-3xl mx-auto w-full p-3 sm:p-5 grid grid-cols-3 sm:grid-cols-4 gap-2.5 sm:gap-3.5 items-start content-start">
                 {deck.map(card => {
                     const isFound = !!found[card.pairId];
                     const isOpen = isFound || open.some(c => c.uid === card.uid);
                     return (
                         <button key={card.uid} onClick={() => flip(card)} disabled={isFound}
-                            className={`min-h-[72px] rounded-2xl px-2 py-3 text-xs sm:text-sm font-bold border-2 transition-all cursor-pointer ${isFound ? "bg-emerald-500 border-emerald-500 text-white" : isOpen ? "bg-white border-violet-500 text-slate-800 shadow-md scale-[1.02]" : "bg-violet-600 border-violet-600 text-violet-200 hover:bg-violet-500"}`}>
-                            {isOpen ? card.text : "?"}
+                            className={`game-card-in min-h-[86px] rounded-3xl px-2 py-3 text-xs sm:text-sm font-black border-2 transition-all duration-200 active:scale-95 cursor-pointer overflow-hidden relative
+                                ${isFound
+                                    ? "bg-gradient-to-br from-emerald-400 to-teal-500 border-transparent text-white shadow-lg shadow-emerald-500/30"
+                                    : isOpen
+                                        ? "bg-white border-cyan-400 text-slate-800 shadow-xl scale-[1.03] ring-4 ring-cyan-100"
+                                        : `bg-gradient-to-br ${theme.grad} border-white/50 text-white shadow-lg hover:-translate-y-1 hover:shadow-xl`}`}>
+                            {isOpen ? (
+                                <span>{isFound ? "✓ " : ""}{card.text}</span>
+                            ) : (
+                                <span className="flex flex-col items-center gap-1">
+                                    <span className="text-3xl drop-shadow">🃏</span>
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-white/80">Buka!</span>
+                                </span>
+                            )}
                         </button>
                     );
                 })}
             </main>
-            {finished && <GameResultModal score={score} benar={matchedCount} salah={wrongCount} durasiDetik={Math.round((Date.now() - startedAt.current) / 1000)} playerName={currentUser.name} finishedLabel={matchedCount === total ? "Ingatanmu hebat!" : "Waktu habis!"} onExit={onExit} onReplay={onReplay} />}
+            {finished && <GameResultModal score={score} benar={matchedCount} salah={wrongCount} durasiDetik={Math.round((Date.now() - startedAt.current) / 1000)} playerName={currentUser.name} finishedLabel={matchedCount === total ? "Ingatanmu hebat! 🧠" : "Waktu habis! ⏰"} onExit={onExit} onReplay={onReplay} />}
         </div>
     );
 }
