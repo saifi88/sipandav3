@@ -12,10 +12,14 @@ const GAME_TYPE_META = {
     scramble: { label: "Acak Kata", emoji: "🔤", desc: "Susun huruf acak jadi kata yang benar", grad: "from-lime-500 via-emerald-500 to-teal-600", soft: "bg-lime-100 text-lime-700", ring: "ring-lime-200" },
     snake: { label: "Ular Tangga", emoji: "🐍", desc: "Lempar dadu, jawab soal, kejar finis", grad: "from-green-500 via-emerald-500 to-teal-600", soft: "bg-green-100 text-green-700", ring: "ring-green-200" },
     truefalse: { label: "Benar atau Salah", emoji: "🤔", desc: "Nilai pernyataan dengan cepat dan tepat", grad: "from-rose-500 via-red-500 to-orange-500", soft: "bg-rose-100 text-rose-700", ring: "ring-rose-200" },
-    hangman: { label: "Tebak Kata", emoji: "🕵️", desc: "Tebak huruf demi huruf sebelum balon habis", grad: "from-violet-500 via-purple-500 to-indigo-600", soft: "bg-violet-100 text-violet-700", ring: "ring-violet-200" }
+    hangman: { label: "Tebak Kata", emoji: "🕵️", desc: "Tebak huruf demi huruf sebelum balon habis", grad: "from-violet-500 via-purple-500 to-indigo-600", soft: "bg-violet-100 text-violet-700", ring: "ring-violet-200" },
+    boss: { label: "Boss Battle", emoji: "👹", desc: "Kalahkan Raja Monster dengan jawaban benar", grad: "from-red-600 via-rose-600 to-orange-500", soft: "bg-red-100 text-red-700", ring: "ring-red-200" },
+    sort: { label: "Sortir Cepat", emoji: "🧺", desc: "Kelompokkan benda ke keranjang yang benar", grad: "from-teal-500 via-emerald-500 to-green-600", soft: "bg-teal-100 text-teal-700", ring: "ring-teal-200" },
+    fillblank: { label: "Isian Singkat", emoji: "✍️", desc: "Lengkapi kalimat dengan mengetik jawaban", grad: "from-indigo-500 via-blue-500 to-sky-500", soft: "bg-indigo-100 text-indigo-700", ring: "ring-indigo-200" },
+    race: { label: "Balapan Kuis", emoji: "🏎️", desc: "Jawab cepat dan salip komputer sampai finis", grad: "from-fuchsia-500 via-purple-500 to-indigo-600", soft: "bg-fuchsia-100 text-fuchsia-700", ring: "ring-fuchsia-200" }
 };
 
-const GAME_TYPES = ["match", "memory", "quizrush", "balloon", "scramble", "snake", "truefalse", "hangman"];
+const GAME_TYPES = ["match", "memory", "quizrush", "balloon", "scramble", "snake", "truefalse", "hangman", "boss", "sort", "fillblank", "race"];
 
 const gameTheme = (type) => GAME_TYPE_META[type] || { label: type, emoji: "🎲", desc: "", grad: "from-slate-500 to-slate-700", soft: "bg-slate-100 text-slate-600", ring: "ring-slate-200" };
 

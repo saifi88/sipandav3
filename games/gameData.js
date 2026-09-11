@@ -5,7 +5,7 @@
 //   id | type | mapel | title | duration | isActive | linkedExamId | pairs (JSON string)
 // linkedExamId (opsional): id tugas di sheet Soal agar game muncul sebagai
 // latihan BONUS di kartu tugas & materi. Kosong = bebas di Zona Game saja.
-// type: match | memory | quizrush | balloon | scramble | snake | truefalse | hangman (semuanya memakai pairs yang sama).
+// type: match | memory | quizrush | balloon | scramble | snake | truefalse | hangman | boss | sort | fillblank | race (semuanya memakai pairs yang sama).
 // Skor game bersifat bonus dan TIDAK mengubah nilai formal di sheet Hasil.
 // =====================================================================
 
@@ -216,6 +216,69 @@ const SAMPLE_GAMES = [
             { left: "Hewan yang berenang 🐟", right: "FISH" },
             { left: "Buah berwarna merah 🍎", right: "APPLE" },
             { left: "Benda untuk dibaca 📖", right: "BOOK" }
+        ]
+    },
+    {
+        id: "boss-mtk-01",
+        type: "boss",
+        mapel: "Matematika",
+        title: "Boss Battle: Perkalian Sakti",
+        duration: 3,
+        pairs: [
+            { left: "7 × 8 = ...", right: "56" },
+            { left: "9 × 7 = ...", right: "63" },
+            { left: "8 × 8 = ...", right: "64" },
+            { left: "6 × 7 = ...", right: "42" },
+            { left: "9 × 9 = ...", right: "81" },
+            { left: "5 × 8 = ...", right: "40" }
+        ]
+    },
+    {
+        id: "sort-ipas-01",
+        type: "sort",
+        mapel: "IPAS",
+        title: "Sortir: Golongan Hewan",
+        duration: 3,
+        pairs: [
+            { left: "Sapi", right: "Herbivora" },
+            { left: "Kambing", right: "Herbivora" },
+            { left: "Kelinci", right: "Herbivora" },
+            { left: "Harimau", right: "Karnivora" },
+            { left: "Singa", right: "Karnivora" },
+            { left: "Buaya", right: "Karnivora" },
+            { left: "Ayam", right: "Omnivora" },
+            { left: "Bebek", right: "Omnivora" },
+            { left: "Beruang", right: "Omnivora" }
+        ]
+    },
+    {
+        id: "fillblank-indo-01",
+        type: "fillblank",
+        mapel: "Bahasa Indonesia",
+        title: "Isian: Kata Baku & Imbuhan",
+        duration: 3,
+        pairs: [
+            { left: "Penulisan yang baku: ___ (apotik)", right: "apotek" },
+            { left: "Lawan kata 'rajin' adalah ___", right: "malas" },
+            { left: "Ibu ___ (sapu) halaman setiap pagi", right: "menyapu" },
+            { left: "Tulis nama dengan huruf kapital: ___ (budi santoso)", right: "Budi Santoso" },
+            { left: "Sinonim kata 'bahagia' adalah ___", right: "senang" },
+            { left: "Kami ___ (main) bola di lapangan", right: "bermain" }
+        ]
+    },
+    {
+        id: "race-mtk-01",
+        type: "race",
+        mapel: "Matematika",
+        title: "Balapan: Pengurangan Kilat",
+        duration: 2,
+        pairs: [
+            { left: "15 − 7 = ...", right: "8" },
+            { left: "20 − 9 = ...", right: "11" },
+            { left: "30 − 12 = ...", right: "18" },
+            { left: "25 − 8 = ...", right: "17" },
+            { left: "40 − 15 = ...", right: "25" },
+            { left: "50 − 23 = ...", right: "27" }
         ]
     }
 ];

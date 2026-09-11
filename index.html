@@ -45,17 +45,21 @@
     <div id="root"></div>
 
     <!-- Modul game (dimuat sebelum aplikasi utama) -->
-    <script type="text/babel" src="games/gameData.js"></script>
-    <script type="text/babel" src="games/GameShell.js"></script>
-    <script type="text/babel" src="games/MatchGame.js"></script>
-    <script type="text/babel" src="games/MemoryGame.js"></script>
-    <script type="text/babel" src="games/QuizRushGame.js"></script>
-    <script type="text/babel" src="games/BalloonPopGame.js"></script>
-    <script type="text/babel" src="games/ScrambleGame.js"></script>
-    <script type="text/babel" src="games/SnakeLadderGame.js"></script>
-    <script type="text/babel" src="games/TrueFalseGame.js"></script>
-    <script type="text/babel" src="games/HangmanGame.js"></script>
-    <script type="text/babel" src="games/GameHub.js"></script>
+    <script type="text/babel" src="games/gameData.js?v=9"></script>
+    <script type="text/babel" src="games/GameShell.js?v=9"></script>
+    <script type="text/babel" src="games/MatchGame.js?v=9"></script>
+    <script type="text/babel" src="games/MemoryGame.js?v=9"></script>
+    <script type="text/babel" src="games/QuizRushGame.js?v=9"></script>
+    <script type="text/babel" src="games/BalloonPopGame.js?v=9"></script>
+    <script type="text/babel" src="games/ScrambleGame.js?v=9"></script>
+    <script type="text/babel" src="games/SnakeLadderGame.js?v=9"></script>
+    <script type="text/babel" src="games/TrueFalseGame.js?v=9"></script>
+    <script type="text/babel" src="games/HangmanGame.js?v=9"></script>
+    <script type="text/babel" src="games/BossBattleGame.js?v=9"></script>
+    <script type="text/babel" src="games/SortGame.js?v=9"></script>
+    <script type="text/babel" src="games/FillBlankGame.js?v=9"></script>
+    <script type="text/babel" src="games/RaceGame.js?v=9"></script>
+    <script type="text/babel" src="games/GameHub.js?v=9"></script>
 
     <script type="text/babel">
         const { useState, useEffect } = React;
@@ -146,7 +150,7 @@
             const gamesList = (appData.games && appData.games.length > 0) ? appData.games : SAMPLE_GAMES;
 
             useEffect(() => {
-                const APP_VERSION = "09.09.2026-v1";
+                const APP_VERSION = "11.09.2026-v9";
                 const savedVersion = localStorage.getItem("sipanda_version");
                 
                 if (savedVersion !== APP_VERSION) {
@@ -532,7 +536,47 @@
                                 onReplay={replayGame}
                             />
                         )}
-                        {view === 'game' && activeGame && !['match', 'memory', 'quizrush', 'balloon', 'scramble', 'snake', 'truefalse', 'hangman'].includes(activeGame.type) && (
+                        {view === 'game' && activeGame && activeGame.type === 'boss' && (
+                            <BossBattleGame
+                                key={gamePlayKey}
+                                game={activeGame}
+                                currentUser={currentUser}
+                                onFinish={finishGame}
+                                onExit={exitGame}
+                                onReplay={replayGame}
+                            />
+                        )}
+                        {view === 'game' && activeGame && activeGame.type === 'sort' && (
+                            <SortGame
+                                key={gamePlayKey}
+                                game={activeGame}
+                                currentUser={currentUser}
+                                onFinish={finishGame}
+                                onExit={exitGame}
+                                onReplay={replayGame}
+                            />
+                        )}
+                        {view === 'game' && activeGame && activeGame.type === 'fillblank' && (
+                            <FillBlankGame
+                                key={gamePlayKey}
+                                game={activeGame}
+                                currentUser={currentUser}
+                                onFinish={finishGame}
+                                onExit={exitGame}
+                                onReplay={replayGame}
+                            />
+                        )}
+                        {view === 'game' && activeGame && activeGame.type === 'race' && (
+                            <RaceGame
+                                key={gamePlayKey}
+                                game={activeGame}
+                                currentUser={currentUser}
+                                onFinish={finishGame}
+                                onExit={exitGame}
+                                onReplay={replayGame}
+                            />
+                        )}
+                        {view === 'game' && activeGame && !['match', 'memory', 'quizrush', 'balloon', 'scramble', 'snake', 'truefalse', 'hangman', 'boss', 'sort', 'fillblank', 'race'].includes(activeGame.type) && (
                             <MatchGame
                                 key={gamePlayKey}
                                 game={activeGame}
@@ -1563,7 +1607,7 @@
                         <h4 className="font-bold">Tambah / Update Game (manual + AI)</h4>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                             <div><label className="text-xs font-bold">ID (kosongkan = otomatis)</label><input value={form.id} onChange={e => set('id', e.target.value)} className="w-full px-3 py-2 border rounded-xl text-sm" placeholder="match-mtk-02" /></div>
-                            <div><label className="text-xs font-bold">Tipe</label><select value={form.type} onChange={e => set('type', e.target.value)} className="w-full px-3 py-2 border rounded-xl text-sm"><option value="match">match</option><option value="memory">memory</option><option value="quizrush">quizrush</option><option value="balloon">balloon</option><option value="scramble">scramble</option><option value="snake">snake</option><option value="truefalse">truefalse</option><option value="hangman">hangman</option></select></div>
+                            <div><label className="text-xs font-bold">Tipe</label><select value={form.type} onChange={e => set('type', e.target.value)} className="w-full px-3 py-2 border rounded-xl text-sm"><option value="match">match</option><option value="memory">memory</option><option value="quizrush">quizrush</option><option value="balloon">balloon</option><option value="scramble">scramble</option><option value="snake">snake</option><option value="truefalse">truefalse</option><option value="hangman">hangman</option><option value="boss">boss</option><option value="sort">sort</option><option value="fillblank">fillblank</option><option value="race">race</option></select></div>
                             <div><label className="text-xs font-bold">Mapel</label><select value={form.mapel} onChange={e => set('mapel', e.target.value)} className="w-full px-3 py-2 border rounded-xl text-sm">{MAPEL_LIST.map(m => <option key={m} value={m}>{m}</option>)}</select></div>
                             <div className="md:col-span-2"><label className="text-xs font-bold">Judul</label><input value={form.title} onChange={e => set('title', e.target.value)} className="w-full px-3 py-2 border rounded-xl text-sm" placeholder="Perkalian Cepat 2" /></div>
                             <div><label className="text-xs font-bold">Durasi (mnt)</label><input type="number" value={form.duration} onChange={e => set('duration', e.target.value)} className="w-full px-3 py-2 border rounded-xl text-sm" /></div>
