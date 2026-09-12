@@ -767,5 +767,63 @@ const SAMPLE_GAMES = [
                 { left: "99 × 9 = ...", right: "891" }
             ]
         }
+    },
+    {
+        id: "feed-mtk-01",
+        type: "feed",
+        mapel: "Matematika",
+        title: "Mochi Lapar: Berhitung",
+        duration: 3,
+        pairs: {
+            mudah: [
+                { left: "5 + 8 = ...", right: "13" },
+                { left: "12 − 5 = ...", right: "7" },
+                { left: "3 × 4 = ...", right: "12" },
+                { left: "20 : 5 = ...", right: "4" }
+            ],
+            sedang: [
+                { left: "25 + 37 = ...", right: "62" },
+                { left: "50 − 18 = ...", right: "32" },
+                { left: "7 × 8 = ...", right: "56" },
+                { left: "72 : 8 = ...", right: "9" },
+                { left: "100 − 45 + 5 = ...", right: "60" }
+            ],
+            sulit: [
+                { left: "125 + 375 = ...", right: "500" },
+                { left: "12 × 12 = ...", right: "144" },
+                { left: "3/5 + 1/5 = ...", right: "4/5" },
+                { left: "(20 + 30) : 5 = ...", right: "10" },
+                { left: "10% dari 150?", right: "15" }
+            ]
+        }
+    },
+    {
+        id: "feed-indo-01",
+        type: "feed",
+        mapel: "Bahasa Indonesia",
+        title: "Mochi Lapar: Kata Seru",
+        duration: 3,
+        pairs: {
+            mudah: [
+                { left: "Lawan kata 'besar'?", right: "kecil" },
+                { left: "Sinonim 'senang'?", right: "gembira" },
+                { left: "Hewan bersuara 'meong'?", right: "kucing" },
+                { left: "Warna bendera Indonesia?", right: "merah putih" }
+            ],
+            sedang: [
+                { left: "Bentuk baku 'apotik'?", right: "apotek" },
+                { left: "Sinonim 'pintar'?", right: "cerdas" },
+                { left: "Antonim 'jujur'?", right: "bohong" },
+                { left: "Awal kalimat memakai huruf ...", right: "kapital" },
+                { left: "Penutup surat untuk guru?", right: "hormat saya" }
+            ],
+            sulit: [
+                { left: "Imbuhan 'me- + masak'?", right: "memasak" },
+                { left: "Bentuk baku 'resiko'?", right: "risiko" },
+                { left: "Makna 'buah tangan'?", right: "oleh-oleh" },
+                { left: "Lawan kata 'abstrak'?", right: "konkret" },
+                { left: "Kalimat ajakan memakai tanda ...", right: "seru" }
+            ]
+        }
     }
 ];

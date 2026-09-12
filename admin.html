@@ -268,6 +268,27 @@
             );
         }
 
+        // Panduan format bank soal per tipe (agar konsisten dengan validasi AI backend).
+        const BANK_FORMAT_GUIDE = {
+            match: "left = istilah/soal (maks 12 kata), right = jawaban singkat (maks 5 kata).",
+            memory: "left = istilah/soal (maks 12 kata), right = jawaban singkat (maks 5 kata).",
+            quizrush: "left = pertanyaan singkat, right = jawaban singkat. Pilihan ganda dibuat otomatis & unik.",
+            balloon: "left = pertanyaan singkat, right = jawaban singkat. Pilihan ganda dibuat otomatis & unik.",
+            snake: "left = pertanyaan singkat, right = jawaban singkat. Pilihan ganda dibuat otomatis & unik.",
+            boss: "left = pertanyaan singkat, right = jawaban singkat. Pilihan ganda dibuat otomatis & unik.",
+            race: "left = pertanyaan singkat, right = jawaban singkat. Pilihan ganda dibuat otomatis & unik.",
+            maze: "left = pertanyaan singkat, right = jawaban singkat. Pilihan ganda dibuat otomatis & unik.",
+            tower: "left = pertanyaan/pola singkat, right = jawaban singkat. Pilihan ganda dibuat otomatis & unik.",
+            defense: "left = pertanyaan singkat, right = jawaban singkat. Pilihan ganda dibuat otomatis & unik.",
+            truefalse: "left = istilah, right = pasangan benarnya. Pernyataan salah dibuat otomatis.",
+            scramble: "right = SATU kata tanpa spasi (3-12 huruf), left = petunjuk singkat.",
+            hangman: "right = SATU kata tanpa spasi (3-12 huruf), left = petunjuk singkat.",
+            sort: "right = label KATEGORI (1-2 kata, dipakai berulang), left = nama benda.",
+            fillblank: "left = SATU kalimat dengan tepat satu ___, right = jawaban (1-3 kata).",
+            sequence: "left = perintah singkat, right = kalimat benar 4-9 kata (diacak oleh game).",
+            feed: "left = pertanyaan singkat, right = jawaban singkat. Disajikan sebagai makanan untuk disuapi."
+        };
+
         function GameAdminPanelStandalone({ games = [], gameResults = [], exams = [] }) {
             const EMPTY_BANK = '[{"left":"Akar","right":"Menyerap air"}]';
             const [form, setForm] = useState({ id: '', type: 'match', mapel: MAPEL_LIST[0], title: '', duration: 3, linkedExamId: '', pairsMudah: EMPTY_BANK, pairsSedang: EMPTY_BANK, pairsSulit: EMPTY_BANK });
@@ -325,12 +346,61 @@
                 setForm(f => ({ ...f, pairsMudah: src, pairsSedang: src, pairsSulit: src }));
                 alert("Isi disalin ke 3 level. Ubah tiap level agar soalnya berbeda!");
             };
+            const collectAllBanks = () => {
+                const all = [];
+                ['pairsMudah', 'pairsSedang', 'pairsSulit'].forEach(k => {
+                    try {
+                        const a = JSON.parse(form[k]);
+                        if (Array.isArray(a)) a.forEach(p => {
+                            if (p && p.left !== undefined && p.right !== undefined) {
+                                const L = String(p.left), R = String(p.right);
+                                if (!all.some(x => x.left === L && x.right === R)) all.push({ left: L, right: R });
+                            }
+                        });
+                    } catch (e) {}
+                });
+                return all;
+            };
+            const fillSplitResult = (banks) => {
+                setForm(f => ({ ...f,
+                    pairsMudah: JSON.stringify(banks.mudah || [], null, 1),
+                    pairsSedang: JSON.stringify(banks.sedang || [], null, 1),
+                    pairsSulit: JSON.stringify(banks.sulit || [], null, 1)
+                }));
+            };
+            const splitEvenBanks = () => {
+                const all = collectAllBanks();
+                if (all.length < 3) { alert("Butuh minimal 3 soal gabungan untuk dibagi."); return; }
+                const n = Math.ceil(all.length / 3);
+                fillSplitResult({ mudah: all.slice(0, n), sedang: all.slice(n, n * 2), sulit: all.slice(n * 2) });
+                alert(`Dibagi rata berurutan: 🌱${Math.min(n, all.length)} 🔥${Math.min(n, Math.max(0, all.length - n))} ⚡${Math.max(0, all.length - n * 2)}. Tinjau tiap tab lalu simpan.`);
+            };
+            const splitAIBanks = async () => {
+                const all = collectAllBanks();
+                if (all.length < 3) { alert("Butuh minimal 3 soal gabungan untuk dibagi."); return; }
+                setAiLoading(true);
+                try {
+                    const res = await fetch(WEB_APP_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: "classifyGamePairs", pairs: all, mapel: form.mapel }) });
+                    const out = await res.json();
+                    if (out.status === "success" && out.banks) {
+                        fillSplitResult(out.banks);
+                        alert(`AI membagi: 🌱${(out.banks.mudah || []).length} 🔥${(out.banks.sedang || []).length} ⚡${(out.banks.sulit || []).length}. Tinjau tiap tab lalu simpan.`);
+                    } else throw new Error(out.message || "Gagal");
+                } catch (err) { alert("Gagal membagi: " + err.message); }
+                finally { setAiLoading(false); }
+            };
             const parseBank = (text) => {
                 const t = String(text || "").trim();
                 if (!t) return [];
                 const arr = JSON.parse(t);
                 if (!Array.isArray(arr)) throw new Error("harus array");
                 return arr.filter(p => p && p.left !== undefined && p.right !== undefined);
+            };
+            const countBank = (text) => {
+                try {
+                    const a = JSON.parse(String(text || ""));
+                    return Array.isArray(a) ? a.length : -1;
+                } catch (e) { return -1; }
             };
             const handleSave = async (e) => {
                 e.preventDefault();
@@ -356,7 +426,7 @@
                         <form onSubmit={handleSave} className="p-4 space-y-3">
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                                 <div><label className="block text-xs font-semibold mb-1">ID (opsional)</label><input value={form.id} onChange={e => set('id', e.target.value)} className="w-full p-2 border text-sm" placeholder="match-mtk-02" /></div>
-                                <div><label className="block text-xs font-semibold mb-1">Tipe</label><select value={form.type} onChange={e => set('type', e.target.value)} className="w-full p-2 border text-sm"><option value="match">match</option><option value="memory">memory</option><option value="quizrush">quizrush</option><option value="balloon">balloon</option><option value="scramble">scramble</option><option value="snake">snake</option><option value="truefalse">truefalse</option><option value="hangman">hangman</option><option value="boss">boss</option><option value="sort">sort</option><option value="fillblank">fillblank</option><option value="race">race</option><option value="tower">tower</option><option value="sequence">sequence</option><option value="maze">maze</option><option value="defense">defense</option></select></div>
+                                <div><label className="block text-xs font-semibold mb-1">Tipe</label><select value={form.type} onChange={e => set('type', e.target.value)} className="w-full p-2 border text-sm"><option value="match">match</option><option value="memory">memory</option><option value="quizrush">quizrush</option><option value="balloon">balloon</option><option value="scramble">scramble</option><option value="snake">snake</option><option value="truefalse">truefalse</option><option value="hangman">hangman</option><option value="boss">boss</option><option value="sort">sort</option><option value="fillblank">fillblank</option><option value="race">race</option><option value="tower">tower</option><option value="sequence">sequence</option><option value="maze">maze</option><option value="defense">defense</option><option value="feed">feed</option></select></div>
                                 <div><label className="block text-xs font-semibold mb-1">Mapel</label><select value={form.mapel} onChange={e => set('mapel', e.target.value)} className="w-full p-2 border text-sm">{MAPEL_LIST.map(m => <option key={m} value={m}>{m}</option>)}</select></div>
                                 <div className="md:col-span-2"><label className="block text-xs font-semibold mb-1">Judul</label><input value={form.title} onChange={e => set('title', e.target.value)} className="w-full p-2 border text-sm" /></div>
                                 <div><label className="block text-xs font-semibold mb-1">Durasi</label><input type="number" value={form.duration} onChange={e => set('duration', e.target.value)} className="w-full p-2 border text-sm" /></div>
@@ -364,13 +434,19 @@
                             </div>
                             <div>
                                 <label className="block text-xs font-semibold mb-1">Bank Soal per Level (isi berbeda tiap level!)</label>
-                                <div className="flex gap-1.5 mb-2">
-                                    {[['mudah', '🌱 Mudah'], ['sedang', '🔥 Sedang'], ['sulit', '⚡ Sulit']].map(([k, label]) => (
-                                        <button key={k} type="button" onClick={() => setBankTab(k)} className={`px-3 py-1.5 text-xs font-bold cursor-pointer ${bankTab === k ? 'bg-slate-900 text-white' : 'bg-slate-100'}`}>{label}</button>
-                                    ))}
-                                    <button type="button" onClick={copyBankToOthers} className="ml-auto px-3 py-1.5 text-[11px] font-bold bg-amber-100 text-amber-700 cursor-pointer">📋 Salin ke semua level</button>
+                                <div className="flex gap-1.5 mb-2 flex-wrap">
+                                    {[['mudah', 'pairsMudah', '🌱 Mudah'], ['sedang', 'pairsSedang', '🔥 Sedang'], ['sulit', 'pairsSulit', '⚡ Sulit']].map(([k, bk, label]) => {
+                                        const n = countBank(form[bk]);
+                                        return (
+                                            <button key={k} type="button" onClick={() => setBankTab(k)} className={`px-3 py-1.5 text-xs font-bold cursor-pointer ${bankTab === k ? 'bg-slate-900 text-white' : 'bg-slate-100'}`}>{label}{n >= 0 ? ` (${n})` : ' ⚠️'}</button>
+                                        );
+                                    })}
+                                    <button type="button" onClick={copyBankToOthers} className="px-3 py-1.5 text-[11px] font-bold bg-amber-100 text-amber-700 cursor-pointer">📋 Salin</button>
+                                    <button type="button" onClick={splitEvenBanks} className="px-3 py-1.5 text-[11px] font-bold bg-sky-100 text-sky-700 cursor-pointer" title="Bagi gabungan 3 tab menjadi 3 level secara berurutan">✂️ Bagi rata</button>
+                                    <button type="button" onClick={splitAIBanks} disabled={aiLoading} className="px-3 py-1.5 text-[11px] font-bold bg-violet-100 text-violet-700 cursor-pointer disabled:opacity-40" title="AI mengklasifikasikan gabungan soal ke 3 level">🤖 Bagi AI</button>
                                 </div>
                                 <textarea rows="4" value={form[bankKey]} onChange={e => set(bankKey, e.target.value)} className="w-full p-2 border text-xs font-mono"></textarea>
+                                <p className="text-[11px] text-gray-500 mt-1">📐 Format <b>{form.type}</b>: {BANK_FORMAT_GUIDE[form.type] || BANK_FORMAT_GUIDE.match}</p>
                             </div>
                             <div className="flex flex-wrap gap-2 items-center">
                                 <input type="file" multiple onChange={handleAiFiles} className="text-xs" />

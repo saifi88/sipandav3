@@ -148,7 +148,7 @@ function FillBlankGame({ game, currentUser, onFinish, onExit, onReplay }) {
                             <input value={input} onChange={e => setInput(e.target.value)} disabled={!!revealed || flashOk}
                                 onKeyDown={e => { if (e.key === "Enter") submit(); }}
                                 placeholder="Ketik jawaban di sini..."
-                                className="flex-1 px-4 py-3.5 rounded-2xl border-2 border-slate-200 text-base font-bold outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100 disabled:opacity-50" />
+                                className="flex-1 min-w-0 px-4 py-3.5 rounded-2xl border-2 border-slate-200 text-base font-bold outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100 disabled:opacity-50" />
                             <button onClick={submit} disabled={!!revealed || flashOk}
                                 className={`px-5 py-3.5 rounded-2xl text-white text-sm font-black shadow-lg transition-all active:scale-95 cursor-pointer bg-gradient-to-r ${theme.grad} hover:brightness-110 disabled:opacity-50`}>
                                 Kirim ➤

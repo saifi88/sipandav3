@@ -39,31 +39,38 @@
         .game-balloon { animation: balloonRise linear infinite; }
         .game-balloon-wobble { animation: balloonWobble 0.35s ease-in-out; }
         .game-balloon-pop { animation: balloonPop 0.35s ease-out forwards; }
+        /* Poles HP: tinggi layar ikut address-bar (dvh) + cegah zoom ketuk-ganda di tombol */
+        @supports (min-height: 100dvh) { .min-h-screen { min-height: 100dvh; } }
+        button { touch-action: manipulation; }
+        /* Mochi si Monster Lapar: mata berkedip */
+        @keyframes petBlink { 0%, 91%, 100% { transform: scaleY(1); } 94%, 97% { transform: scaleY(0.12); } }
+        .pet-blink { animation: petBlink 4.2s ease-in-out infinite; transform-origin: center; }
     </style>
 </head>
 <body class="bg-slate-100 font-sans text-slate-800">
     <div id="root"></div>
 
     <!-- Modul game (dimuat sebelum aplikasi utama) -->
-    <script type="text/babel" src="games/gameData.js?v=12"></script>
-    <script type="text/babel" src="games/GameShell.js?v=12"></script>
-    <script type="text/babel" src="games/MatchGame.js?v=12"></script>
-    <script type="text/babel" src="games/MemoryGame.js?v=12"></script>
-    <script type="text/babel" src="games/QuizRushGame.js?v=12"></script>
-    <script type="text/babel" src="games/BalloonPopGame.js?v=12"></script>
-    <script type="text/babel" src="games/ScrambleGame.js?v=12"></script>
-    <script type="text/babel" src="games/SnakeLadderGame.js?v=12"></script>
-    <script type="text/babel" src="games/TrueFalseGame.js?v=12"></script>
-    <script type="text/babel" src="games/HangmanGame.js?v=12"></script>
-    <script type="text/babel" src="games/BossBattleGame.js?v=12"></script>
-    <script type="text/babel" src="games/SortGame.js?v=12"></script>
-    <script type="text/babel" src="games/FillBlankGame.js?v=12"></script>
-    <script type="text/babel" src="games/RaceGame.js?v=12"></script>
-    <script type="text/babel" src="games/LogicTowerGame.js?v=12"></script>
-    <script type="text/babel" src="games/SequenceGame.js?v=12"></script>
-    <script type="text/babel" src="games/MazeGame.js?v=12"></script>
-    <script type="text/babel" src="games/DefenseGame.js?v=12"></script>
-    <script type="text/babel" src="games/GameHub.js?v=12"></script>
+    <script type="text/babel" src="games/gameData.js?v=16"></script>
+    <script type="text/babel" src="games/GameShell.js?v=16"></script>
+    <script type="text/babel" src="games/MatchGame.js?v=16"></script>
+    <script type="text/babel" src="games/MemoryGame.js?v=16"></script>
+    <script type="text/babel" src="games/QuizRushGame.js?v=16"></script>
+    <script type="text/babel" src="games/BalloonPopGame.js?v=16"></script>
+    <script type="text/babel" src="games/ScrambleGame.js?v=16"></script>
+    <script type="text/babel" src="games/SnakeLadderGame.js?v=16"></script>
+    <script type="text/babel" src="games/TrueFalseGame.js?v=16"></script>
+    <script type="text/babel" src="games/HangmanGame.js?v=16"></script>
+    <script type="text/babel" src="games/BossBattleGame.js?v=16"></script>
+    <script type="text/babel" src="games/SortGame.js?v=16"></script>
+    <script type="text/babel" src="games/FillBlankGame.js?v=16"></script>
+    <script type="text/babel" src="games/RaceGame.js?v=16"></script>
+    <script type="text/babel" src="games/LogicTowerGame.js?v=16"></script>
+    <script type="text/babel" src="games/SequenceGame.js?v=16"></script>
+    <script type="text/babel" src="games/MazeGame.js?v=16"></script>
+    <script type="text/babel" src="games/DefenseGame.js?v=16"></script>
+    <script type="text/babel" src="games/FeedGame.js?v=16"></script>
+    <script type="text/babel" src="games/GameHub.js?v=16"></script>
 
     <script type="text/babel">
         const { useState, useEffect } = React;
@@ -154,7 +161,7 @@
             const gamesList = (appData.games && appData.games.length > 0) ? appData.games : SAMPLE_GAMES;
 
             useEffect(() => {
-                const APP_VERSION = "11.09.2026-v12";
+                const APP_VERSION = "11.09.2026-v16";
                 const savedVersion = localStorage.getItem("sipanda_version");
                 
                 if (savedVersion !== APP_VERSION) {
@@ -199,6 +206,8 @@
 
             // ---------- GAME (BONUS-ONLY, terhubung ke tugas via linkedExamId) ----------
             const startGame = (game, contextExamId = null) => {
+                // Layar penuh otomatis agar nyaman dimainkan di HP
+                if (typeof requestGameFullscreen === "function") requestGameFullscreen();
                 setActiveGame(game);
                 setGameContextExamId(contextExamId);
                 setGamePlayKey(k => k + 1);
@@ -208,6 +217,7 @@
             const replayGame = () => setGamePlayKey(k => k + 1);
 
             const exitGame = () => {
+                if (typeof exitGameFullscreen === "function") exitGameFullscreen();
                 setActiveGame(null);
                 setView('games');
             };
@@ -623,7 +633,17 @@
                                 onReplay={replayGame}
                             />
                         )}
-                        {view === 'game' && activeGame && !['match', 'memory', 'quizrush', 'balloon', 'scramble', 'snake', 'truefalse', 'hangman', 'boss', 'sort', 'fillblank', 'race', 'tower', 'sequence', 'maze', 'defense'].includes(activeGame.type) && (
+                        {view === 'game' && activeGame && activeGame.type === 'feed' && (
+                            <FeedGame
+                                key={gamePlayKey}
+                                game={activeGame}
+                                currentUser={currentUser}
+                                onFinish={finishGame}
+                                onExit={exitGame}
+                                onReplay={replayGame}
+                            />
+                        )}
+                        {view === 'game' && activeGame && !['match', 'memory', 'quizrush', 'balloon', 'scramble', 'snake', 'truefalse', 'hangman', 'boss', 'sort', 'fillblank', 'race', 'tower', 'sequence', 'maze', 'defense', 'feed'].includes(activeGame.type) && (
                             <MatchGame
                                 key={gamePlayKey}
                                 game={activeGame}
@@ -1576,6 +1596,27 @@
             );
         }
 
+        // Panduan format bank soal per tipe (agar konsisten dengan validasi AI backend).
+        const BANK_FORMAT_GUIDE = {
+            match: "left = istilah/soal (maks 12 kata), right = jawaban singkat (maks 5 kata).",
+            memory: "left = istilah/soal (maks 12 kata), right = jawaban singkat (maks 5 kata).",
+            quizrush: "left = pertanyaan singkat, right = jawaban singkat. Pilihan ganda dibuat otomatis & unik.",
+            balloon: "left = pertanyaan singkat, right = jawaban singkat. Pilihan ganda dibuat otomatis & unik.",
+            snake: "left = pertanyaan singkat, right = jawaban singkat. Pilihan ganda dibuat otomatis & unik.",
+            boss: "left = pertanyaan singkat, right = jawaban singkat. Pilihan ganda dibuat otomatis & unik.",
+            race: "left = pertanyaan singkat, right = jawaban singkat. Pilihan ganda dibuat otomatis & unik.",
+            maze: "left = pertanyaan singkat, right = jawaban singkat. Pilihan ganda dibuat otomatis & unik.",
+            tower: "left = pertanyaan/pola singkat, right = jawaban singkat. Pilihan ganda dibuat otomatis & unik.",
+            defense: "left = pertanyaan singkat, right = jawaban singkat. Pilihan ganda dibuat otomatis & unik.",
+            truefalse: "left = istilah, right = pasangan benarnya. Pernyataan salah dibuat otomatis.",
+            scramble: "right = SATU kata tanpa spasi (3-12 huruf), left = petunjuk singkat.",
+            hangman: "right = SATU kata tanpa spasi (3-12 huruf), left = petunjuk singkat.",
+            sort: "right = label KATEGORI (1-2 kata, dipakai berulang), left = nama benda.",
+            fillblank: "left = SATU kalimat dengan tepat satu ___, right = jawaban (1-3 kata).",
+            sequence: "left = perintah singkat, right = kalimat benar 4-9 kata (diacak oleh game).",
+            feed: "left = pertanyaan singkat, right = jawaban singkat. Disajikan sebagai makanan untuk disuapi."
+        };
+
         function GameAdminPanel({ games = [], gameResults = [], exams = [] }) {
             const EMPTY_BANK = '[{"left":"Akar","right":"Menyerap air"}]';
             const [form, setForm] = useState({ id: '', type: 'match', mapel: MAPEL_LIST[0], title: '', duration: 3, linkedExamId: '', pairsMudah: EMPTY_BANK, pairsSedang: EMPTY_BANK, pairsSulit: EMPTY_BANK });
@@ -1644,12 +1685,72 @@
                 alert("Isi disalin ke 3 level. Ubah tiap level agar soalnya berbeda!");
             };
 
+            // Gabungkan 3 tab jadi 1 daftar (buang duplikat) untuk dibagi ulang.
+            const collectAllBanks = () => {
+                const all = [];
+                ['pairsMudah', 'pairsSedang', 'pairsSulit'].forEach(k => {
+                    try {
+                        const a = JSON.parse(form[k]);
+                        if (Array.isArray(a)) a.forEach(p => {
+                            if (p && p.left !== undefined && p.right !== undefined) {
+                                const L = String(p.left), R = String(p.right);
+                                if (!all.some(x => x.left === L && x.right === R)) all.push({ left: L, right: R });
+                            }
+                        });
+                    } catch (e) {}
+                });
+                return all;
+            };
+
+            const fillSplitResult = (banks) => {
+                setForm(f => ({ ...f,
+                    pairsMudah: JSON.stringify(banks.mudah || [], null, 1),
+                    pairsSedang: JSON.stringify(banks.sedang || [], null, 1),
+                    pairsSulit: JSON.stringify(banks.sulit || [], null, 1)
+                }));
+            };
+
+            // Bagi rata berurutan (instan, tanpa AI): susun mudah→sulit dulu!
+            const splitEvenBanks = () => {
+                const all = collectAllBanks();
+                if (all.length < 3) { alert("Butuh minimal 3 soal gabungan untuk dibagi."); return; }
+                const n = Math.ceil(all.length / 3);
+                fillSplitResult({ mudah: all.slice(0, n), sedang: all.slice(n, n * 2), sulit: all.slice(n * 2) });
+                alert(`Dibagi rata berurutan: 🌱${Math.min(n, all.length)} 🔥${Math.min(n, Math.max(0, all.length - n))} ⚡${Math.max(0, all.length - n * 2)}. Tinjau tiap tab lalu simpan.`);
+            };
+
+            // Bagi dengan AI: diklasifikasikan mudah/sedang/sulit.
+            const splitAIBanks = async () => {
+                const all = collectAllBanks();
+                if (all.length < 3) { alert("Butuh minimal 3 soal gabungan untuk dibagi."); return; }
+                setAiLoading(true);
+                try {
+                    const res = await fetch(WEB_APP_URL, {
+                        method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                        body: JSON.stringify({ action: "classifyGamePairs", pairs: all, mapel: form.mapel })
+                    });
+                    const out = await res.json();
+                    if (out.status === "success" && out.banks) {
+                        fillSplitResult(out.banks);
+                        alert(`AI membagi: 🌱${(out.banks.mudah || []).length} 🔥${(out.banks.sedang || []).length} ⚡${(out.banks.sulit || []).length}. Tinjau tiap tab lalu simpan.`);
+                    } else throw new Error(out.message || "Gagal");
+                } catch (err) { alert("Gagal membagi: " + err.message); }
+                finally { setAiLoading(false); }
+            };
+
             const parseBank = (text) => {
                 const t = String(text || "").trim();
                 if (!t) return [];
                 const arr = JSON.parse(t);
                 if (!Array.isArray(arr)) throw new Error("harus array");
                 return arr.filter(p => p && p.left !== undefined && p.right !== undefined);
+            };
+
+            const countBank = (text) => {
+                try {
+                    const a = JSON.parse(String(text || ""));
+                    return Array.isArray(a) ? a.length : -1;
+                } catch (e) { return -1; }
             };
 
             const handleSave = async (e) => {
@@ -1693,7 +1794,7 @@
                         <h4 className="font-bold">Tambah / Update Game (manual + AI)</h4>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                             <div><label className="text-xs font-bold">ID (kosongkan = otomatis)</label><input value={form.id} onChange={e => set('id', e.target.value)} className="w-full px-3 py-2 border rounded-xl text-sm" placeholder="match-mtk-02" /></div>
-                            <div><label className="text-xs font-bold">Tipe</label><select value={form.type} onChange={e => set('type', e.target.value)} className="w-full px-3 py-2 border rounded-xl text-sm"><option value="match">match</option><option value="memory">memory</option><option value="quizrush">quizrush</option><option value="balloon">balloon</option><option value="scramble">scramble</option><option value="snake">snake</option><option value="truefalse">truefalse</option><option value="hangman">hangman</option><option value="boss">boss</option><option value="sort">sort</option><option value="fillblank">fillblank</option><option value="race">race</option><option value="tower">tower</option><option value="sequence">sequence</option><option value="maze">maze</option><option value="defense">defense</option></select></div>
+                            <div><label className="text-xs font-bold">Tipe</label><select value={form.type} onChange={e => set('type', e.target.value)} className="w-full px-3 py-2 border rounded-xl text-sm"><option value="match">match</option><option value="memory">memory</option><option value="quizrush">quizrush</option><option value="balloon">balloon</option><option value="scramble">scramble</option><option value="snake">snake</option><option value="truefalse">truefalse</option><option value="hangman">hangman</option><option value="boss">boss</option><option value="sort">sort</option><option value="fillblank">fillblank</option><option value="race">race</option><option value="tower">tower</option><option value="sequence">sequence</option><option value="maze">maze</option><option value="defense">defense</option><option value="feed">feed</option></select></div>
                             <div><label className="text-xs font-bold">Mapel</label><select value={form.mapel} onChange={e => set('mapel', e.target.value)} className="w-full px-3 py-2 border rounded-xl text-sm">{MAPEL_LIST.map(m => <option key={m} value={m}>{m}</option>)}</select></div>
                             <div className="md:col-span-2"><label className="text-xs font-bold">Judul</label><input value={form.title} onChange={e => set('title', e.target.value)} className="w-full px-3 py-2 border rounded-xl text-sm" placeholder="Perkalian Cepat 2" /></div>
                             <div><label className="text-xs font-bold">Durasi (mnt)</label><input type="number" value={form.duration} onChange={e => set('duration', e.target.value)} className="w-full px-3 py-2 border rounded-xl text-sm" /></div>
@@ -1701,14 +1802,20 @@
                         </div>
                         <div>
                             <label className="text-xs font-bold">Bank Soal per Level <span className="font-normal text-slate-500">(isi berbeda tiap level!)</span></label>
-                            <div className="flex gap-1.5 mt-1 mb-2">
-                                {[['mudah', '🌱 Mudah'], ['sedang', '🔥 Sedang'], ['sulit', '⚡ Sulit']].map(([k, label]) => (
-                                    <button key={k} type="button" onClick={() => setBankTab(k)}
-                                        className={`px-3 py-1.5 rounded-xl text-xs font-black cursor-pointer ${bankTab === k ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'}`}>{label}</button>
-                                ))}
-                                <button type="button" onClick={copyBankToOthers} className="ml-auto px-3 py-1.5 rounded-xl text-[11px] font-bold bg-amber-100 text-amber-700 cursor-pointer" title="Salin isi tab aktif ke 2 level lain sebagai titik awal">📋 Salin ke semua level</button>
+                            <div className="flex gap-1.5 mt-1 mb-2 flex-wrap">
+                                {[['mudah', 'pairsMudah', '🌱 Mudah'], ['sedang', 'pairsSedang', '🔥 Sedang'], ['sulit', 'pairsSulit', '⚡ Sulit']].map(([k, bk, label]) => {
+                                    const n = countBank(form[bk]);
+                                    return (
+                                        <button key={k} type="button" onClick={() => setBankTab(k)}
+                                            className={`px-3 py-1.5 rounded-xl text-xs font-black cursor-pointer ${bankTab === k ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'}`}>{label}{n >= 0 ? ` (${n})` : ' ⚠️'}</button>
+                                    );
+                                })}
+                                <button type="button" onClick={copyBankToOthers} className="px-3 py-1.5 rounded-xl text-[11px] font-bold bg-amber-100 text-amber-700 cursor-pointer" title="Salin isi tab aktif ke 2 level lain sebagai titik awal">📋 Salin</button>
+                                <button type="button" onClick={splitEvenBanks} className="px-3 py-1.5 rounded-xl text-[11px] font-bold bg-sky-100 text-sky-700 cursor-pointer" title="Bagi gabungan 3 tab menjadi 3 level secara berurutan (susun mudah→sulit dulu)">✂️ Bagi rata</button>
+                                <button type="button" onClick={splitAIBanks} disabled={aiLoading} className="px-3 py-1.5 rounded-xl text-[11px] font-bold bg-violet-100 text-violet-700 cursor-pointer disabled:opacity-40" title="AI mengklasifikasikan gabungan soal ke 3 level">🤖 Bagi AI</button>
                             </div>
                             <textarea rows="4" value={form[bankKey]} onChange={e => set(bankKey, e.target.value)} className="w-full px-3 py-2 border rounded-xl text-xs font-mono" />
+                            <p className="text-[11px] text-slate-500 mt-1">📐 Format <b>{form.type}</b>: {BANK_FORMAT_GUIDE[form.type] || BANK_FORMAT_GUIDE.match} AI backend memfilter otomatis hasil yang kepanjangan/duplikat.</p>
                         </div>
                         <div className="flex flex-wrap gap-2 items-center">
                             <input type="file" multiple accept="image/jpeg,image/png,application/pdf" onChange={handleAiFiles} className="text-xs" />

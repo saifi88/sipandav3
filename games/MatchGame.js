@@ -11,6 +11,7 @@ let sipandaAudioCtx = null;
 const playGameTone = (freq, duration, type = "sine") => {
     try {
         sipandaAudioCtx = sipandaAudioCtx || new (window.AudioContext || window.webkitAudioContext)();
+        if (sipandaAudioCtx.state === "suspended") sipandaAudioCtx.resume().catch(() => {});
         const osc = sipandaAudioCtx.createOscillator();
         const gain = sipandaAudioCtx.createGain();
         osc.type = type;

@@ -20,10 +20,11 @@ const GAME_TYPE_META = {
     tower: { label: "Menara Logika", emoji: "🗼", desc: "Panjat menara, jaga nyawa & combo beruntun", grad: "from-indigo-500 via-violet-500 to-purple-600", soft: "bg-indigo-100 text-indigo-700", ring: "ring-indigo-200" },
     sequence: { label: "Susun Kalimat", emoji: "📜", desc: "Susun kata acak jadi kalimat yang benar", grad: "from-teal-500 via-emerald-500 to-green-600", soft: "bg-teal-100 text-teal-700", ring: "ring-teal-200" },
     maze: { label: "Labirin Harta", emoji: "🗺️", desc: "Jelajahi labirin, kumpulkan kunci, hindari jebakan", grad: "from-amber-500 via-orange-500 to-red-500", soft: "bg-amber-100 text-amber-700", ring: "ring-amber-200" },
-    defense: { label: "Invasi Robot", emoji: "🤖", desc: "Hancurkan robot sebelum mencapai markas", grad: "from-rose-500 via-red-500 to-orange-500", soft: "bg-rose-100 text-rose-700", ring: "ring-rose-200" }
+    defense: { label: "Invasi Robot", emoji: "🤖", desc: "Hancurkan robot sebelum mencapai markas", grad: "from-rose-500 via-red-500 to-orange-500", soft: "bg-rose-100 text-rose-700", ring: "ring-rose-200" },
+    feed: { label: "Monster Lapar", emoji: "👾", desc: "Suapi Mochi dengan jawaban yang benar", grad: "from-orange-400 via-pink-500 to-purple-500", soft: "bg-orange-100 text-orange-700", ring: "ring-orange-200" }
 };
 
-const GAME_TYPES = ["match", "memory", "quizrush", "balloon", "scramble", "snake", "truefalse", "hangman", "boss", "sort", "fillblank", "race", "tower", "sequence", "maze", "defense"];
+const GAME_TYPES = ["match", "memory", "quizrush", "balloon", "scramble", "snake", "truefalse", "hangman", "boss", "sort", "fillblank", "race", "tower", "sequence", "maze", "defense", "feed"];
 
 const gameTheme = (type) => GAME_TYPE_META[type] || { label: type, emoji: "🎲", desc: "", grad: "from-slate-500 to-slate-700", soft: "bg-slate-100 text-slate-600", ring: "ring-slate-200" };
 
@@ -221,11 +222,36 @@ const gamesForExam = (games, exam) => {
     );
 };
 
+// Layar penuh untuk game (nyaman di HP): sembunyikan address bar browser.
+// iOS Safari tidak mendukung fullscreen elemen → gagal diam-diam (aman).
+const requestGameFullscreen = () => {
+    try {
+        const el = document.documentElement;
+        if (document.fullscreenElement || document.webkitFullscreenElement) return;
+        if (el.requestFullscreen) el.requestFullscreen().catch(() => {});
+        else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+    } catch (e) {}
+};
+
+const exitGameFullscreen = () => {
+    try {
+        if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => {});
+        else if (document.webkitFullscreenElement && document.webkitExitFullscreen) document.webkitExitFullscreen();
+    } catch (e) {}
+};
+
+const toggleGameFullscreen = () => {
+    try {
+        if (document.fullscreenElement || document.webkitFullscreenElement) exitGameFullscreen();
+        else requestGameFullscreen();
+    } catch (e) {}
+};
+
 function GameHud({ theme, mapel, title, score, timeLeft, timeWarning, onExit }) {
     return (
         <header className="sticky top-0 z-40 px-3 sm:px-5 pt-3">
             <div className="max-w-5xl mx-auto flex items-center gap-2 sm:gap-3 rounded-3xl border border-white/50 bg-white/75 backdrop-blur-xl shadow-lg shadow-violet-900/10 px-3 sm:px-4 py-2.5">
-                <button onClick={onExit} className="w-9 h-9 rounded-2xl bg-slate-900 text-white flex items-center justify-center hover:scale-105 active:scale-95 transition-transform cursor-pointer shrink-0" title="Kembali">
+                <button onClick={onExit} className="w-10 h-10 rounded-2xl bg-slate-900 text-white flex items-center justify-center hover:scale-105 active:scale-95 transition-transform cursor-pointer shrink-0" title="Kembali">
                     <Icon name="chevron-left" size={20} />
                 </button>
                 <div className="min-w-0 flex-1">
@@ -239,6 +265,9 @@ function GameHud({ theme, mapel, title, score, timeLeft, timeWarning, onExit }) 
                 <div className={`px-3 py-2 rounded-2xl text-xs font-black font-mono shrink-0 border ${timeWarning ? "bg-red-500 text-white border-red-400 animate-pulse" : "bg-slate-900 text-white border-slate-700"}`}>
                     ⏱ {formatGameTime(timeLeft)}
                 </div>
+                <button onClick={() => { if (typeof toggleGameFullscreen === "function") toggleGameFullscreen(); }} className="w-10 h-10 rounded-2xl bg-white border border-slate-200 text-slate-600 flex items-center justify-center hover:scale-105 active:scale-95 transition-transform cursor-pointer shrink-0" title="Layar penuh">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"></path><path d="M21 8V5a2 2 0 0 0-2-2h-3"></path><path d="M3 16v3a2 2 0 0 0 2 2h3"></path><path d="M16 21h3a2 2 0 0 0 2-2v-3"></path></svg>
+                </button>
             </div>
         </header>
     );
