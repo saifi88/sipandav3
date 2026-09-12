@@ -16,25 +16,195 @@ const GAME_TYPE_META = {
     boss: { label: "Boss Battle", emoji: "👹", desc: "Kalahkan Raja Monster dengan jawaban benar", grad: "from-red-600 via-rose-600 to-orange-500", soft: "bg-red-100 text-red-700", ring: "ring-red-200" },
     sort: { label: "Sortir Cepat", emoji: "🧺", desc: "Kelompokkan benda ke keranjang yang benar", grad: "from-teal-500 via-emerald-500 to-green-600", soft: "bg-teal-100 text-teal-700", ring: "ring-teal-200" },
     fillblank: { label: "Isian Singkat", emoji: "✍️", desc: "Lengkapi kalimat dengan mengetik jawaban", grad: "from-indigo-500 via-blue-500 to-sky-500", soft: "bg-indigo-100 text-indigo-700", ring: "ring-indigo-200" },
-    race: { label: "Balapan Kuis", emoji: "🏎️", desc: "Jawab cepat dan salip komputer sampai finis", grad: "from-fuchsia-500 via-purple-500 to-indigo-600", soft: "bg-fuchsia-100 text-fuchsia-700", ring: "ring-fuchsia-200" }
+    race: { label: "Balapan Kuis", emoji: "🏎️", desc: "Jawab cepat dan salip komputer sampai finis", grad: "from-fuchsia-500 via-purple-500 to-indigo-600", soft: "bg-fuchsia-100 text-fuchsia-700", ring: "ring-fuchsia-200" },
+    tower: { label: "Menara Logika", emoji: "🗼", desc: "Panjat menara, jaga nyawa & combo beruntun", grad: "from-indigo-500 via-violet-500 to-purple-600", soft: "bg-indigo-100 text-indigo-700", ring: "ring-indigo-200" },
+    sequence: { label: "Susun Kalimat", emoji: "📜", desc: "Susun kata acak jadi kalimat yang benar", grad: "from-teal-500 via-emerald-500 to-green-600", soft: "bg-teal-100 text-teal-700", ring: "ring-teal-200" },
+    maze: { label: "Labirin Harta", emoji: "🗺️", desc: "Jelajahi labirin, kumpulkan kunci, hindari jebakan", grad: "from-amber-500 via-orange-500 to-red-500", soft: "bg-amber-100 text-amber-700", ring: "ring-amber-200" },
+    defense: { label: "Invasi Robot", emoji: "🤖", desc: "Hancurkan robot sebelum mencapai markas", grad: "from-rose-500 via-red-500 to-orange-500", soft: "bg-rose-100 text-rose-700", ring: "ring-rose-200" }
 };
 
-const GAME_TYPES = ["match", "memory", "quizrush", "balloon", "scramble", "snake", "truefalse", "hangman", "boss", "sort", "fillblank", "race"];
+const GAME_TYPES = ["match", "memory", "quizrush", "balloon", "scramble", "snake", "truefalse", "hangman", "boss", "sort", "fillblank", "race", "tower", "sequence", "maze", "defense"];
 
 const gameTheme = (type) => GAME_TYPE_META[type] || { label: type, emoji: "🎲", desc: "", grad: "from-slate-500 to-slate-700", soft: "bg-slate-100 text-slate-600", ring: "ring-slate-200" };
 
 const formatGameTime = (s) => `${Math.floor(s / 60).toString().padStart(2, "0")}:${(s % 60).toString().padStart(2, "0")}`;
 
-// Anti-farm: maksimal 1 penyimpanan per game per 30 detik per siswa.
-const canSaveGameResult = (nisn, gameId) => {
+// Anti-farm: maksimal 1 penyimpanan per game per level per 30 detik per siswa.
+const canSaveGameResult = (nisn, gameId, level) => {
     try {
-        const key = `game_last_${nisn}_${gameId}`;
+        const key = `game_last_${nisn}_${gameId}_${level || "sedang"}`;
         const last = Number(localStorage.getItem(key) || 0);
         if (Date.now() - last < 30000) return false;
         localStorage.setItem(key, String(Date.now()));
         return true;
     } catch (e) { return true; }
 };
+
+// =====================================================================
+// SISTEM LEVEL KESULITAN (berlaku untuk semua game lama).
+// 🌱 Mudah  = 1x putaran bank soal, penalti kecil, tanpa timer per soal.
+// 🔥 Sedang = 2x putaran (soal diacak ulang), penalti sedang + timer 20 dtk.
+// ⚡ Sulit  = 3x putaran, penalti besar + timer 12 dtk per soal.
+// Total waktu tetap = durasi game, jadi makin tinggi level makin sempit
+// waktu per soal. Skor 100 jauh lebih sulit didapat.
+// =====================================================================
+
+const GAME_DIFFICULTY = {
+    mudah: { key: "mudah", label: "Mudah", emoji: "🌱", desc: "Santai · 1 putaran soal", rounds: 1, penalty: 3, timePerQ: 0 },
+    sedang: { key: "sedang", label: "Sedang", emoji: "🔥", desc: "Menantang · 2 putaran soal", rounds: 2, penalty: 6, timePerQ: 20 },
+    sulit: { key: "sulit", label: "Sulit", emoji: "⚡", desc: "Ekstrem · 3 putaran + waktu ketat", rounds: 3, penalty: 10, timePerQ: 12 }
+};
+const GAME_DIFFICULTY_ORDER = ["mudah", "sedang", "sulit"];
+
+const diffSettings = (level) => GAME_DIFFICULTY[level] || GAME_DIFFICULTY.sedang;
+
+// Ulangi bank soal sebanyak `rounds` putaran, tiap putaran diacak ulang.
+// (Dipakai sebagai fallback bila game masih memakai format lama: satu array
+// untuk semua level.)
+const buildRounds = (pairs, rounds) => {
+    const out = [];
+    const n = Math.max(1, rounds || 1);
+    for (let r = 0; r < n; r++) {
+        const sh = (typeof shuffleArray === "function" ? shuffleArray : (a) => a)(pairs.map(p => ({ left: p.left, right: p.right })));
+        sh.forEach(o => out.push({ left: o.left, right: o.right, round: r + 1 }));
+    }
+    return out;
+};
+
+// =====================================================================
+// BANK SOAL PER LEVEL: game.pairs boleh berupa:
+//   - array (format lama): satu bank untuk semua level (fallback putaran).
+//   - objek { mudah:[...], sedang:[...], sulit:[...] }: tiap level punya
+//     soal yang benar-benar berbeda. Kolom Sheet TIDAK berubah (tetap JSON).
+// =====================================================================
+
+const isPerLevelPairs = (pairs) => (
+    pairs && typeof pairs === "object" && !Array.isArray(pairs) &&
+    (Array.isArray(pairs.mudah) || Array.isArray(pairs.sedang) || Array.isArray(pairs.sulit))
+);
+
+const isPerLevelGame = (game) => isPerLevelPairs(game && game.pairs);
+
+// Semua pasangan dalam satu array datar (untuk pengecoh & fallback).
+const flatPairs = (game) => {
+    const p = game && game.pairs;
+    if (!p) return [];
+    if (Array.isArray(p)) return p.filter(x => x && x.left !== undefined && x.right !== undefined);
+    if (isPerLevelPairs(p)) {
+        return ["mudah", "sedang", "sulit"]
+            .flatMap(k => (Array.isArray(p[k]) ? p[k] : []))
+            .filter(x => x && x.left !== undefined && x.right !== undefined);
+    }
+    return [];
+};
+
+// Bank soal untuk level tertentu. Fallback: ulangi bank tunggal per putaran.
+const bankForLevel = (game, level, rounds) => {
+    const p = game && game.pairs;
+    if (isPerLevelPairs(p)) {
+        const bank = Array.isArray(p[level]) ? p[level] : [];
+        if (bank.length > 0) return bank.map(o => ({ left: o.left, right: o.right, round: 1 }));
+        // Level kosong → pakai bank level lain yang ada.
+        const other = ["mudah", "sedang", "sulit"].map(k => p[k]).find(a => Array.isArray(a) && a.length > 0) || [];
+        return other.map(o => ({ left: o.left, right: o.right, round: 1 }));
+    }
+    const arr = Array.isArray(p) ? p : [];
+    return buildRounds(arr, rounds || 1);
+};
+
+// Jumlah soal per level (untuk layar pilih level & kartu game).
+const levelBankCounts = (game) => {
+    const p = game && game.pairs;
+    if (isPerLevelPairs(p)) {
+        return {
+            mudah: (p.mudah || []).length,
+            sedang: (p.sedang || []).length,
+            sulit: (p.sulit || []).length,
+            perLevel: true
+        };
+    }
+    const n = Array.isArray(p) ? p.length : 0;
+    return { mudah: n, sedang: n * 2, sulit: n * 3, perLevel: false };
+};
+
+// Bangun opsi pilihan ganda dari daftar putaran (1 benar + 3 pengecoh).
+const buildMCQ = (roundsArr, pairs) => roundsArr.map((r) => {
+    const others = (typeof shuffleArray === "function" ? shuffleArray : (a) => a)(
+        pairs.filter(p => String(p.right) !== String(r.right))
+    ).slice(0, 3).map(o => o.right);
+    const opts = (typeof shuffleArray === "function" ? shuffleArray : (a) => a)([r.right, ...others]);
+    return { q: r.left, answer: r.right, options: opts, round: r.round };
+});
+
+// Skor tantangan: penalti per level, makin sulit makin perih.
+const calcChallengeScore = (benar, total, salah, level) => {
+    if (!total) return 0;
+    return Math.max(0, Math.round((benar / total) * 100 - salah * diffSettings(level).penalty));
+};
+
+const levelLabel = (level) => {
+    const d = diffSettings(level);
+    return `${d.emoji} ${d.label}`;
+};
+
+// Lencana level kecil untuk HUD / kartu.
+function DifficultyBadge({ level }) {
+    const d = diffSettings(level);
+    return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-900 text-white text-[11px] font-black shrink-0">{d.emoji} {d.label}</span>
+    );
+}
+
+// Layar pilih level yang ramah anak SD. dipakai di awal tiap game.
+// `banks` (opsional): { mudah, sedang, sulit, perLevel } dari levelBankCounts().
+function DifficultySelect({ theme, mapel, title, pairCount, banks, typeLabel, onPick, onExit }) {
+    const soalFor = (key) => {
+        if (banks) return banks[key] || 0;
+        const d = GAME_DIFFICULTY[key];
+        return (pairCount || 0) * d.rounds;
+    };
+    const distinct = banks ? !!banks.perLevel : false;
+    return (
+        <div className="min-h-screen bg-gradient-to-b from-slate-950 via-purple-950 to-slate-900 flex flex-col select-none relative overflow-hidden">
+            <div className="pointer-events-none absolute top-10 left-8 text-3xl game-float">🎮</div>
+            <div className="pointer-events-none absolute top-24 right-10 text-2xl game-float" style={{ animationDelay: "1s" }}>⭐</div>
+            <GameHud theme={theme} mapel={mapel} title={title} score={0} timeLeft={(3 * 60)} timeWarning={false} onExit={onExit} />
+            <main className="relative flex-1 max-w-2xl mx-auto w-full p-4 sm:p-6 space-y-3">
+                <div className="text-center pt-2">
+                    <div className="text-5xl game-float inline-block">{theme.emoji}</div>
+                    <h2 className="text-xl sm:text-2xl font-black text-white mt-2">Pilih Level Tantanganmu!</h2>
+                    <p className="text-white/70 text-sm font-semibold mt-1">{typeLabel} · {distinct ? "bank soal berbeda tiap level!" : `${pairCount} soal dasar`} · makin tinggi level, makin menantang!</p>
+                </div>
+                {GAME_DIFFICULTY_ORDER.map((key) => {
+                    const d = GAME_DIFFICULTY[key];
+                    const soal = soalFor(key);
+                    return (
+                        <button key={key} onClick={() => onPick(key)}
+                            className="w-full text-left bg-white rounded-[1.75rem] p-4 sm:p-5 shadow-xl hover:-translate-y-1 hover:shadow-2xl active:scale-[0.98] transition-all cursor-pointer relative overflow-hidden group">
+                            <div className={`absolute top-0 left-0 right-0 h-2 bg-gradient-to-r ${theme.grad}`}></div>
+                            <div className="flex items-center gap-3">
+                                <span className="text-4xl sm:text-5xl group-hover:scale-110 transition-transform">{d.emoji}</span>
+                                <div className="flex-1 min-w-0">
+                                    <p className="font-black text-slate-900 text-base sm:text-lg">Level {d.label}</p>
+                                    <p className="text-xs text-slate-500 font-semibold">{distinct ? `${soal} soal khusus level ini` : d.desc}</p>
+                                    <div className="flex flex-wrap gap-1.5 mt-2">
+                                        <span className="px-2.5 py-1 rounded-full bg-violet-100 text-violet-700 text-[11px] font-black">📝 {soal} soal</span>
+                                        <span className="px-2.5 py-1 rounded-full bg-rose-100 text-rose-600 text-[11px] font-black">−{d.penalty}/salah</span>
+                                        {d.timePerQ > 0
+                                            ? <span className="px-2.5 py-1 rounded-full bg-amber-100 text-amber-700 text-[11px] font-black">⏱ {d.timePerQ} dtk/soal</span>
+                                            : <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 text-[11px] font-black">⏱ santai</span>}
+                                    </div>
+                                </div>
+                                <span className={`px-4 py-2.5 rounded-2xl bg-gradient-to-r ${theme.grad} text-white text-xs font-black shadow-lg shrink-0`}>Main ▶</span>
+                            </div>
+                        </button>
+                    );
+                })}
+                <p className="text-center text-[11px] font-bold text-white/50">💡 Skor 100 di level ⚡ Sulit = bintang sejati! Skor tersimpan per level.</p>
+            </main>
+        </div>
+    );
+}
 
 const bestScoreForGame = (gameResults, nisn, gameId) => {
     const mine = (gameResults || []).filter(r => String(r.nisn) === String(nisn) && r.gameId === gameId);
@@ -74,7 +244,7 @@ function GameHud({ theme, mapel, title, score, timeLeft, timeWarning, onExit }) 
     );
 }
 
-function GameResultModal({ score, benar, salah, durasiDetik, playerName, finishedLabel, onExit, onReplay }) {
+function GameResultModal({ score, benar, salah, durasiDetik, playerName, finishedLabel, onExit, onReplay, level }) {
     const stars = scoreToStars(score);
     const confetti = React.useMemo(() => (
         Array.from({ length: 18 }).map((_, i) => ({
@@ -109,6 +279,9 @@ function GameResultModal({ score, benar, salah, durasiDetik, playerName, finishe
                         </div>
                         <div className="text-6xl font-black bg-gradient-to-r from-violet-600 via-fuchsia-500 to-amber-500 bg-clip-text text-transparent game-gradient-text">{score}</div>
                         <p className="text-[11px] font-bold text-violet-600 bg-violet-50 inline-block px-3 py-1 rounded-full mt-1">✨ Nilai bonus latihan</p>
+                        {level && (
+                            <div className="mt-1.5"><span className="text-[11px] font-black text-slate-700 bg-slate-100 inline-block px-3 py-1 rounded-full">Level: {levelLabel(level)}</span></div>
+                        )}
                         <div className="grid grid-cols-3 gap-2 text-xs mt-4">
                             <div className="rounded-2xl p-2.5 border bg-gradient-to-b from-emerald-50 to-white border-emerald-100">
                                 <p className="text-emerald-600 font-black text-xl leading-none">{benar}</p>

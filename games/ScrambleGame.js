@@ -1,12 +1,20 @@
 // =====================================================================
-// ACAK KATA: huruf jawaban diacak, siswa mengetuk huruf berurutan.
-// Petunjuk (left) ditampilkan, jawaban (right) disusun. Bonus-only.
-// Spasi pada jawaban tampil sebagai pemisah kata (bukan ubin).
+// ACAK KATA + LEVEL: susun huruf jadi kata yang benar.
+// 🌱 1 putaran, tanpa pengecoh · 🔥 2 putaran + 2 huruf pengecoh
+// ⚡ 3 putaran + 4 huruf pengecoh + penalti besar. Bonus-only.
 // =====================================================================
 
 function ScrambleGame({ game, currentUser, onFinish, onExit, onReplay }) {
-    const pairs = game.pairs || [];
-    const total = pairs.length;
+    const pairs = flatPairs(game);
+    const [level, setLevel] = React.useState(null);
+    const DS = diffSettings(level);
+
+    const roundsArr = React.useMemo(() => {
+        if (!level) return [];
+        return bankForLevel(game, level, DS.rounds);
+    }, [game.id, level]);
+    const total = roundsArr.length;
+    const decoys = !level ? 0 : level === "mudah" ? 0 : level === "sedang" ? 2 : 4;
 
     const [idx, setIdx] = React.useState(0);
     const [benar, setBenar] = React.useState(0);
@@ -19,36 +27,46 @@ function ScrambleGame({ game, currentUser, onFinish, onExit, onReplay }) {
     const startedAt = React.useRef(Date.now());
     const reported = React.useRef(false);
 
-    const score = total === 0 ? 0 : Math.max(0, Math.round((benar / total) * 100 - salah * 5));
+    const score = calcChallengeScore(benar, total, salah, level);
     const theme = (typeof gameTheme === "function" ? gameTheme("scramble") : { grad: "from-lime-500 to-teal-600" });
     const timeWarning = timeLeft <= 15 && !finished;
 
-    const cur = pairs[idx];
+    const cur = roundsArr[idx];
     const answerUpper = cur ? String(cur.right).toUpperCase() : "";
     const poolLetters = answerUpper.replace(/ /g, "").split("");
 
-    // Ubin huruf acak untuk ronde ini.
+    // Ubin huruf: jawaban + pengecoh (level tinggi).
     const tiles = React.useMemo(() => {
-        return shuffleArray(poolLetters.map((ch, i) => ({ uid: `${idx}-${reshuffleKey}-${i}`, ch })));
-    }, [idx, reshuffleKey, game.id]);
+        if (!level || !cur) return [];
+        let extra = [];
+        if (decoys > 0) {
+            const pool = pairs.map(p => String(p.right).toUpperCase().replace(/[^A-Z]/g, "")).join("");
+            const ans = new Set(poolLetters);
+            const cands = shuffleArray(pool.split("").filter(ch => ch && !ans.has(ch)));
+            extra = cands.slice(0, decoys);
+            while (extra.length < decoys) extra.push("ABCDEFGHIJKLMNOPQRSTUVWXYZ"[Math.floor(Math.random() * 26)]);
+        }
+        return shuffleArray([...poolLetters, ...extra].map((ch, i) => ({ uid: `${idx}-${reshuffleKey}-${i}`, ch })));
+    }, [idx, reshuffleKey, game.id, level]);
 
     React.useEffect(() => {
-        if (finished) return;
+        if (!level || finished) return;
         const t = setInterval(() => setTimeLeft(prev => (prev <= 1 ? 0 : prev - 1)), 1000);
         return () => clearInterval(t);
-    }, [finished]);
+    }, [finished, level]);
 
     React.useEffect(() => {
-        if (!finished && (idx >= total || timeLeft === 0)) setFinished(true);
-    }, [idx, timeLeft, total, finished]);
+        if (!level || finished || total === 0) return;
+        if (idx >= total || timeLeft === 0) setFinished(true);
+    }, [idx, timeLeft, total, finished, level]);
 
     React.useEffect(() => {
-        if (!finished || reported.current) return;
+        if (!level || !finished || reported.current) return;
         reported.current = true;
         playGameTone(1046, 0.3, "triangle");
         onFinish && onFinish({
             gameId: game.id, title: game.title, mapel: game.mapel, type: "scramble",
-            skor: score, benar, salah,
+            skor: score, benar, salah, level,
             durasiDetik: Math.round((Date.now() - startedAt.current) / 1000)
         });
     }, [finished]);
@@ -56,9 +74,9 @@ function ScrambleGame({ game, currentUser, onFinish, onExit, onReplay }) {
     // Reset pilihan tiap ganti soal.
     React.useEffect(() => { setPicked([]); }, [idx]);
 
-    // Cek otomatis saat semua huruf terisi.
+    // Cek otomatis saat slot jawaban penuh (sepanjang jawaban asli).
     React.useEffect(() => {
-        if (finished || poolLetters.length === 0 || picked.length !== poolLetters.length) return;
+        if (!level || finished || poolLetters.length === 0 || picked.length !== poolLetters.length) return;
         const byUid = {};
         tiles.forEach(t => { byUid[t.uid] = t.ch; });
         const guess = picked.map(uid => byUid[uid]).join("");
@@ -76,7 +94,7 @@ function ScrambleGame({ game, currentUser, onFinish, onExit, onReplay }) {
     }, [picked]);
 
     const tapTile = (uid) => {
-        if (finished || picked.includes(uid) || picked.length >= poolLetters.length) return;
+        if (!level || finished || picked.includes(uid) || picked.length >= poolLetters.length) return;
         playGameTone(660, 0.07);
         setPicked(p => [...p, uid]);
     };
@@ -90,6 +108,13 @@ function ScrambleGame({ game, currentUser, onFinish, onExit, onReplay }) {
         if (!finished && (benar + salah) > 0 && !window.confirm("Keluar dari game? Progres tidak akan disimpan.")) return;
         onExit();
     };
+
+    if (!level) {
+        return (
+            <DifficultySelect theme={{ ...theme, label: "Acak Kata", emoji: "🔤" }} mapel={game.mapel} title={game.title}
+                pairCount={pairs.length} banks={levelBankCounts(game)} typeLabel="Acak Kata" onPick={setLevel} onExit={onExit} />
+        );
+    }
 
     // Slot jawaban: susun huruf terpilih ke posisi non-spasi.
     const byUid = {};
@@ -110,15 +135,20 @@ function ScrambleGame({ game, currentUser, onFinish, onExit, onReplay }) {
             <div className="pointer-events-none absolute bottom-8 left-6 text-4xl game-float">🔤</div>
             <div className="pointer-events-none absolute bottom-8 right-6 text-4xl game-float" style={{ animationDelay: "1s" }}>✏️</div>
 
-            <GameHud theme={{ ...theme, label: "Acak Kata", emoji: "🔤" }} mapel={game.mapel} title={game.title} score={score} timeLeft={timeLeft} timeWarning={timeWarning} onExit={handleExit} />
+            <GameHud theme={{ ...theme, label: `Acak Kata · ${levelLabel(level)}`, emoji: "🔤" }} mapel={game.mapel} title={game.title} score={score} timeLeft={timeLeft} timeWarning={timeWarning} onExit={handleExit} />
 
             <main className="relative flex-1 max-w-2xl mx-auto w-full p-3 sm:p-5 space-y-4">
+                <div className="flex items-center justify-center gap-2 flex-wrap">
+                    <DifficultyBadge level={level} />
+                    {cur && <span className="px-2.5 py-1 rounded-full bg-white border border-slate-200 text-slate-500 text-[11px] font-black">Putaran {cur.round}/{DS.rounds}</span>}
+                    {decoys > 0 && <span className="px-2.5 py-1 rounded-full bg-rose-100 text-rose-600 text-[11px] font-black">😈 +{decoys} pengecoh!</span>}
+                </div>
                 {/* Petunjuk */}
                 <div key={idx} className="game-card-in bg-white/90 backdrop-blur rounded-[1.75rem] border border-white shadow-xl p-5 text-center relative overflow-hidden">
                     <div className={`absolute top-0 left-0 right-0 h-2 bg-gradient-to-r ${theme.grad}`}></div>
                     <p className="text-[11px] font-black uppercase tracking-widest text-lime-600">Kata {Math.min(idx + 1, total)}/{total} · {poolLetters.length} huruf · Benar {benar} · Salah {salah}</p>
                     <h2 className="text-xl sm:text-2xl font-black text-slate-900 mt-1.5">{cur ? cur.left : "…"}</h2>
-                    <p className="text-[11px] text-slate-400 font-bold mt-1">Ketuk huruf di bawah secara berurutan 👇</p>
+                    <p className="text-[11px] text-slate-400 font-bold mt-1">Ketuk huruf di bawah secara berurutan 👇{decoys > 0 ? " (awas huruf pengecoh!)" : ""}</p>
                 </div>
 
                 {/* Slot jawaban */}
@@ -152,7 +182,7 @@ function ScrambleGame({ game, currentUser, onFinish, onExit, onReplay }) {
                 </div>
             </main>
 
-            {finished && <GameResultModal score={score} benar={benar} salah={salah} durasiDetik={Math.round((Date.now() - startedAt.current) / 1000)} playerName={currentUser.name} finishedLabel="Semua kata tersusun! 🔤" onExit={onExit} onReplay={onReplay} />}
+            {finished && <GameResultModal score={score} benar={benar} salah={salah} durasiDetik={Math.round((Date.now() - startedAt.current) / 1000)} playerName={currentUser.name} finishedLabel="Semua kata tersusun! 🔤" level={level} onExit={onExit} onReplay={onReplay} />}
         </div>
     );
 }

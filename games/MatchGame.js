@@ -1,7 +1,8 @@
 // =====================================================================
-// GAME MENCOCOKKAN (DRAG & DROP) — modern playful theme.
+// GAME MENCOCOKKAN (DRAG & DROP) + LEVEL — modern playful theme.
+// 🌱 1 papan · 🔥 2 papan berurutan · ⚡ 3 papan + penalti besar.
+// Penalti: −3 / −6 / −10 per salah pasang. Skor 100 jauh lebih sulit.
 // Menggunakan Pointer Events agar berjalan di mouse maupun layar sentuh.
-// Mode alternatif: ketuk item kiri lalu ketuk kotak kanan (untuk HP kecil).
 // Catatan: helper `Icon` dan `shuffleArray` berasal dari index.html dan
 // tersedia saat runtime karena semua script dimuat di halaman yang sama.
 // =====================================================================
@@ -22,7 +23,7 @@ const playGameTone = (freq, duration, type = "sine") => {
     } catch (e) { /* audio tidak wajib */ }
 };
 
-const WRONG_PENALTY = 5; // poin dikurangi setiap salah pasang
+const WRONG_PENALTY = 5; // (warisan) kini penalti mengikuti level via calcChallengeScore
 
 const calcMatchScore = (benar, salah, total) => {
     if (total === 0) return 0;
@@ -33,12 +34,24 @@ const calcMatchScore = (benar, salah, total) => {
 const scoreToStars = (score) => (score >= 90 ? 3 : score >= 70 ? 2 : score > 0 ? 1 : 0);
 
 function MatchGame({ game, currentUser, onFinish, onExit, onReplay }) {
-    const pairs = game.pairs || [];
-    const total = pairs.length;
+    const pairs = flatPairs(game);
+    const [level, setLevel] = React.useState(null);
+    const DS = diffSettings(level);
+    // Bank per level: kartu benar-benar beda tiap level (1 papan).
+    // Format lama: papan diulang per putaran.
+    const isPL = isPerLevelGame(game);
+    const boards = isPL ? 1 : DS.rounds;
+    const boardBank = React.useMemo(() => {
+        if (!level) return [];
+        return bankForLevel(game, level, DS.rounds);
+    }, [game.id, level]);
+    const total = (isPL ? boardBank.length : pairs.length) * (isPL ? 1 : DS.rounds);
 
-    const [leftItems] = React.useState(() => shuffleArray(pairs.map((p, i) => ({ id: i, text: p.left }))));
-    const [rightItems] = React.useState(() => shuffleArray(pairs.map((p, i) => ({ id: i, text: p.right }))));
+    const [boardIdx, setBoardIdx] = React.useState(0);
+    const [leftItems, setLeftItems] = React.useState([]);
+    const [rightItems, setRightItems] = React.useState([]);
     const [matched, setMatched] = React.useState({});
+    const [doneCount, setDoneCount] = React.useState(0);
     const [wrongCount, setWrongCount] = React.useState(0);
     const [selected, setSelected] = React.useState(null);
     const [drag, setDrag] = React.useState(null);
@@ -52,30 +65,57 @@ function MatchGame({ game, currentUser, onFinish, onExit, onReplay }) {
     const startedAt = React.useRef(Date.now());
     const reported = React.useRef(false);
 
-    const matchedCount = Object.keys(matched).length;
-    const score = calcMatchScore(matchedCount, wrongCount, total);
+    // Acak ulang papan tiap ganti board / level.
+    React.useEffect(() => {
+        if (!level) return;
+        const src = isPL ? boardBank : pairs;
+        setLeftItems(shuffleArray(src.map((p, i) => ({ id: i, text: p.left }))));
+        setRightItems(shuffleArray(src.map((p, i) => ({ id: i, text: p.right }))));
+        setMatched({});
+        setSelected(null);
+    }, [game.id, level, boardIdx]);
+
+    const matchedCount = doneCount + Object.keys(matched).length;
+    const boardSrc = isPL ? boardBank : pairs;
+    const boardTotal = boardSrc.length;
+    const score = calcChallengeScore(matchedCount, total, wrongCount, level);
     const progress = total > 0 ? Math.round((matchedCount / total) * 100) : 0;
 
     // Timer
     React.useEffect(() => {
-        if (finished) return;
+        if (!level || finished) return;
         const t = setInterval(() => setTimeLeft(prev => (prev <= 1 ? 0 : prev - 1)), 1000);
         return () => clearInterval(t);
-    }, [finished]);
+    }, [finished, level]);
 
-    // Selesai jika semua cocok atau waktu habis
+    // Selesai jika semua papan cocok atau waktu habis
     React.useEffect(() => {
-        if (finished) return;
-        if ((total > 0 && matchedCount === total) || timeLeft === 0) {
+        if (!level || finished) return;
+        if ((total > 0 && matchedCount >= total) || timeLeft === 0) {
             setFinished(true);
         }
-    }, [matchedCount, timeLeft, total, finished]);
+    }, [matchedCount, timeLeft, total, finished, level]);
+
+    // Papan selesai → lanjut papan berikutnya (format lama)
+    React.useEffect(() => {
+        if (!level || finished || boardTotal === 0) return;
+        if (Object.keys(matched).length >= boardTotal) {
+            if (!isPL && boardIdx + 1 < DS.rounds) {
+                const timer = setTimeout(() => {
+                    setDoneCount(d => d + boardTotal);
+                    setBoardIdx(b => b + 1);
+                    playGameTone(1046, 0.25, "triangle");
+                }, 700);
+                return () => clearTimeout(timer);
+            }
+        }
+    }, [matched, boardIdx, boardTotal, finished, level]);
 
     // Laporkan hasil sekali saja
     React.useEffect(() => {
-        if (!finished || reported.current) return;
+        if (!level || !finished || reported.current) return;
         reported.current = true;
-        if (matchedCount === total) playGameTone(1046, 0.35, "triangle");
+        if (matchedCount >= total) playGameTone(1046, 0.35, "triangle");
         onFinish && onFinish({
             gameId: game.id,
             title: game.title,
@@ -84,12 +124,13 @@ function MatchGame({ game, currentUser, onFinish, onExit, onReplay }) {
             skor: score,
             benar: matchedCount,
             salah: wrongCount,
+            level,
             durasiDetik: Math.round((Date.now() - startedAt.current) / 1000)
         });
     }, [finished]);
 
     const attemptMatch = (leftId, rightId) => {
-        if (finished || matched[leftId] || matched[rightId]) return;
+        if (!level || finished || matched[leftId] || matched[rightId]) return;
         if (leftId === rightId) {
             setMatched(m => ({ ...m, [leftId]: true }));
             setPopId(rightId);
@@ -154,21 +195,30 @@ function MatchGame({ game, currentUser, onFinish, onExit, onReplay }) {
     const theme = (typeof gameTheme === "function" ? gameTheme("match") : { grad: "from-violet-500 to-fuchsia-500" });
     const timeWarning = timeLeft <= 15 && !finished;
 
+    if (!level) {
+        return (
+            <DifficultySelect theme={{ ...theme, label: "Mencocokkan", emoji: "🧩" }} mapel={game.mapel} title={game.title}
+                pairCount={pairs.length} banks={levelBankCounts(game)} typeLabel="Mencocokkan" onPick={setLevel} onExit={onExit} />
+        );
+    }
+
     return (
         <div className="min-h-screen bg-[#f3f0ff] flex flex-col select-none relative overflow-hidden">
             <div className="pointer-events-none absolute -top-20 -left-20 w-72 h-72 rounded-full bg-fuchsia-300/40 blur-3xl"></div>
             <div className="pointer-events-none absolute top-40 -right-24 w-80 h-80 rounded-full bg-violet-300/40 blur-3xl"></div>
             <div className="pointer-events-none absolute bottom-0 left-1/3 w-72 h-72 rounded-full bg-amber-200/50 blur-3xl"></div>
 
-            <GameHud theme={{ ...theme, label: "Mencocokkan", emoji: "🧩" }} mapel={game.mapel} title={game.title} score={score} timeLeft={timeLeft} timeWarning={timeWarning} onExit={handleExit} />
+            <GameHud theme={{ ...theme, label: `Mencocokkan · ${levelLabel(level)}`, emoji: "🧩" }} mapel={game.mapel} title={game.title} score={score} timeLeft={timeLeft} timeWarning={timeWarning} onExit={handleExit} />
 
             {/* PROGRESS */}
             <div className="relative max-w-5xl mx-auto w-full px-3 sm:px-5 pt-4">
                 <div className="rounded-3xl border border-white/60 bg-white/70 backdrop-blur-xl shadow-lg shadow-violet-900/5 p-3.5 sm:p-4">
-                    <div className="flex items-center justify-between gap-2 text-xs font-black">
+                    <div className="flex items-center justify-between gap-2 text-xs font-black flex-wrap">
                         <span className="px-2.5 py-1.5 rounded-full bg-violet-100 text-violet-700">🧩 Cocok {matchedCount}/{total}</span>
+                        <DifficultyBadge level={level} />
+                        <span className="px-2.5 py-1.5 rounded-full bg-violet-50 text-violet-600">Papan {Math.min(boardIdx + 1, boards)}/{boards}</span>
                         <span className="font-black text-slate-400">{progress}%</span>
-                        <span className={`px-2.5 py-1.5 rounded-full ${wrongCount > 0 ? "bg-rose-100 text-rose-600" : "bg-slate-100 text-slate-400"}`}>❌ {wrongCount}</span>
+                        <span className={`px-2.5 py-1.5 rounded-full ${wrongCount > 0 ? "bg-rose-100 text-rose-600" : "bg-slate-100 text-slate-400"}`}>❌ {wrongCount} (−{DS.penalty})</span>
                     </div>
                     <div className="mt-2.5 h-3.5 rounded-full bg-slate-100 overflow-hidden border border-slate-200/70">
                         <div className={`h-full rounded-full bg-gradient-to-r ${theme.grad} transition-all duration-500`} style={{ width: `${progress}%` }}></div>
@@ -222,7 +272,7 @@ function MatchGame({ game, currentUser, onFinish, onExit, onReplay }) {
                             const isHover = hoverTarget === item.id && !isMatched;
                             const isShake = shakeId === item.id;
                             const isPop = popId === item.id;
-                            const leftText = isMatched ? pairs[item.id].left : null;
+                            const leftText = isMatched ? (boardSrc[item.id] || {}).left : null;
                             return (
                                 <div
                                     key={item.id}
@@ -259,7 +309,7 @@ function MatchGame({ game, currentUser, onFinish, onExit, onReplay }) {
             )}
 
             {finished && (
-                <GameResultModal score={score} benar={matchedCount} salah={wrongCount} durasiDetik={Math.round((Date.now() - startedAt.current) / 1000)} playerName={currentUser.name} finishedLabel={matchedCount === total ? "Hebat, semua cocok! 🎉" : "Waktu habis! ⏰"} onExit={onExit} onReplay={onReplay} />
+                <GameResultModal score={score} benar={matchedCount} salah={wrongCount} durasiDetik={Math.round((Date.now() - startedAt.current) / 1000)} playerName={currentUser.name} finishedLabel={matchedCount >= total ? "Hebat, semua cocok! 🎉" : "Waktu habis! ⏰"} level={level} onExit={onExit} onReplay={onReplay} />
             )}
         </div>
     );

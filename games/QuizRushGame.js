@@ -1,54 +1,82 @@
 // =====================================================================
-// KUIS CEPAT (modern): pairs dipakai sebagai bank soal.
-// 4 opsi dibuat dari right milik pasangan lain. Bonus-only.
+// KUIS CEPAT (modern + LEVEL): pairs dipakai sebagai bank soal.
+// 🌱 Mudah: 1 putaran · 🔥 Sedang: 2 putaran + timer 20 dtk/soal
+// ⚡ Sulit: 3 putaran + timer 12 dtk/soal, penalti besar. Bonus-only.
 // =====================================================================
 
 function QuizRushGame({ game, currentUser, onFinish, onExit, onReplay }) {
-    const pairs = game.pairs || [];
-    const questions = React.useMemo(() => pairs.map((p, i) => {
-        const others = shuffleArray(pairs.filter((_, j) => j !== i)).slice(0, 3).map(o => o.right);
-        return { q: p.left, answer: p.right, options: shuffleArray([p.right, ...others]) };
-    }), [game.id]);
+    const pairs = flatPairs(game);
+    const [level, setLevel] = React.useState(null);
+    const DS = diffSettings(level);
+
+    const questions = React.useMemo(() => {
+        if (!level) return [];
+        return buildMCQ(bankForLevel(game, level, DS.rounds), pairs);
+    }, [game.id, level]);
 
     const [idx, setIdx] = React.useState(0);
     const [benar, setBenar] = React.useState(0);
     const [salah, setSalah] = React.useState(0);
     const [picked, setPicked] = React.useState(null);
     const [timeLeft, setTimeLeft] = React.useState((game.duration || 3) * 60);
+    const [qTime, setQTime] = React.useState(DS.timePerQ || 0);
     const [finished, setFinished] = React.useState(false);
     const startedAt = React.useRef(Date.now());
     const reported = React.useRef(false);
     const total = questions.length;
-    const score = total === 0 ? 0 : Math.max(0, Math.round((benar / total) * 100 - salah * 5));
+    const score = calcChallengeScore(benar, total, salah, level);
     const theme = (typeof gameTheme === "function" ? gameTheme("quizrush") : { grad: "from-amber-500 to-pink-500" });
     const timeWarning = timeLeft <= 15 && !finished;
     const totalSecs = (game.duration || 3) * 60;
     const timePct = Math.max(0, Math.round((timeLeft / totalSecs) * 100));
 
+    React.useEffect(() => { setQTime(diffSettings(level).timePerQ || 0); }, [level]);
+    React.useEffect(() => { if (level) setQTime(diffSettings(level).timePerQ || 0); }, [idx]);
+
     React.useEffect(() => {
-        if (finished) return;
+        if (!level || finished) return;
         const t = setInterval(() => setTimeLeft(prev => (prev <= 1 ? 0 : prev - 1)), 1000);
         return () => clearInterval(t);
-    }, [finished]);
+    }, [finished, level]);
+
+    // Timer per soal (Sedang/Sulit): habis = salah + lanjut.
+    React.useEffect(() => {
+        if (!level || finished || !DS.timePerQ || picked !== null) return;
+        if (qTime <= 0) {
+            setSalah(s => s + 1);
+            playGameTone(160, 0.25, "sawtooth");
+            setIdx(i => i + 1);
+            return;
+        }
+        const t = setTimeout(() => setQTime(q => q - 1), 1000);
+        return () => clearTimeout(t);
+    }, [qTime, level, finished, picked, idx]);
 
     React.useEffect(() => {
-        if (!finished && (idx >= total || timeLeft === 0)) setFinished(true);
-    }, [idx, timeLeft, total, finished]);
+        if (!level || finished || idx < total || total === 0) return;
+        if (timeLeft === 0 || idx >= total) setFinished(true);
+    }, [idx, timeLeft, total, finished, level]);
 
     React.useEffect(() => {
-        if (!finished || reported.current) return;
+        if (!level) return;
+        if (!finished && timeLeft === 0) setFinished(true);
+    }, [timeLeft]);
+
+    React.useEffect(() => {
+        if (!level || !finished || reported.current) return;
         reported.current = true;
         playGameTone(1046, 0.3, "triangle");
         onFinish && onFinish({
             gameId: game.id, title: game.title, mapel: game.mapel, type: "quizrush",
-            skor: score, benar, salah,
+            skor: score, benar, salah, level,
             durasiDetik: Math.round((Date.now() - startedAt.current) / 1000)
         });
     }, [finished]);
 
     const answer = (opt) => {
-        if (finished || picked !== null) return;
+        if (!level || finished || picked !== null) return;
         const cur = questions[idx];
+        if (!cur) return;
         setPicked(opt);
         if (opt === cur.answer) { setBenar(b => b + 1); playGameTone(880, 0.12); }
         else { setSalah(s => s + 1); playGameTone(160, 0.2, "sawtooth"); }
@@ -60,6 +88,13 @@ function QuizRushGame({ game, currentUser, onFinish, onExit, onReplay }) {
         onExit();
     };
 
+    if (!level) {
+        return (
+            <DifficultySelect theme={{ ...theme, label: "Kuis Cepat", emoji: "⚡" }} mapel={game.mapel} title={game.title}
+                pairCount={pairs.length} banks={levelBankCounts(game)} typeLabel="Kuis Cepat" onPick={setLevel} onExit={onExit} />
+        );
+    }
+
     const cur = questions[idx];
     const letters = ["A", "B", "C", "D"];
 
@@ -67,8 +102,13 @@ function QuizRushGame({ game, currentUser, onFinish, onExit, onReplay }) {
         <div className="min-h-screen bg-[#fff8ed] flex flex-col select-none relative overflow-hidden">
             <div className="pointer-events-none absolute -top-20 -left-20 w-72 h-72 rounded-full bg-amber-300/50 blur-3xl"></div>
             <div className="pointer-events-none absolute top-1/3 -right-24 w-80 h-80 rounded-full bg-pink-300/40 blur-3xl"></div>
-            <GameHud theme={{ ...theme, label: "Kuis Cepat", emoji: "⚡" }} mapel={game.mapel} title={game.title} score={score} timeLeft={timeLeft} timeWarning={timeWarning} onExit={handleExit} />
-            <div className="relative max-w-2xl mx-auto w-full px-3 sm:px-5 pt-4">
+            <GameHud theme={{ ...theme, label: `Kuis Cepat · ${levelLabel(level)}`, emoji: "⚡" }} mapel={game.mapel} title={game.title} score={score} timeLeft={timeLeft} timeWarning={timeWarning} onExit={handleExit} />
+            <div className="relative max-w-2xl mx-auto w-full px-3 sm:px-5 pt-4 space-y-2">
+                <div className="flex items-center justify-center gap-2">
+                    <DifficultyBadge level={level} />
+                    {DS.timePerQ > 0 && <span className={`px-2.5 py-1 rounded-full text-[11px] font-black ${qTime <= 5 ? "bg-red-500 text-white animate-pulse" : "bg-amber-100 text-amber-700"}`}>⏱ {qTime} dtk</span>}
+                    {cur && <span className="px-2.5 py-1 rounded-full bg-white border border-slate-200 text-slate-500 text-[11px] font-black">Putaran {cur.round}/{DS.rounds}</span>}
+                </div>
                 <div className="h-3 rounded-full bg-white border border-slate-200 overflow-hidden shadow-sm">
                     <div className={`h-full rounded-full transition-all duration-1000 ${timeWarning ? "bg-gradient-to-r from-red-500 to-orange-400" : `bg-gradient-to-r ${theme.grad}`}`} style={{ width: `${timePct}%` }}></div>
                 </div>
@@ -117,7 +157,7 @@ function QuizRushGame({ game, currentUser, onFinish, onExit, onReplay }) {
                     </div>
                 )}
             </main>
-            {finished && <GameResultModal score={score} benar={benar} salah={salah} durasiDetik={Math.round((Date.now() - startedAt.current) / 1000)} playerName={currentUser.name} finishedLabel="Kuis selesai! ⚡" onExit={onExit} onReplay={onReplay} />}
+            {finished && <GameResultModal score={score} benar={benar} salah={salah} durasiDetik={Math.round((Date.now() - startedAt.current) / 1000)} playerName={currentUser.name} finishedLabel="Kuis selesai! ⚡" level={level} onExit={onExit} onReplay={onReplay} />}
         </div>
     );
 }

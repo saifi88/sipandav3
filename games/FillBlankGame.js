@@ -1,14 +1,22 @@
 // =====================================================================
-// ISIAN SINGKAT: lengkapi kalimat rumpang dengan mengetik jawaban.
-// `left` = kalimat berisi ___ , `right` = jawaban. Maks 2x coba per soal,
-// lalu jawaban dibuka. Tombol Lewati netral. Bonus-only.
+// ISIAN SINGKAT + LEVEL: lengkapi kalimat rumpang dengan mengetik jawaban.
+// 🌱 1 putaran + 3x coba · 🔥 2 putaran + 2x coba · ⚡ 3 putaran +
+// 1x coba saja + penalti besar. Tombol Lewati netral. Bonus-only.
 // =====================================================================
 
 const normAnswer = (s) => String(s || "").toLowerCase().trim().replace(/\s+/g, " ");
 
 function FillBlankGame({ game, currentUser, onFinish, onExit, onReplay }) {
-    const pairs = game.pairs || [];
-    const total = pairs.length;
+    const pairs = flatPairs(game);
+    const [level, setLevel] = React.useState(null);
+    const DS = diffSettings(level);
+    const maxAttempts = !level ? 2 : level === "mudah" ? 3 : level === "sedang" ? 2 : 1;
+
+    const roundsArr = React.useMemo(() => {
+        if (!level) return [];
+        return bankForLevel(game, level, DS.rounds);
+    }, [game.id, level]);
+    const total = roundsArr.length;
 
     const [idx, setIdx] = React.useState(0);
     const [benar, setBenar] = React.useState(0);
@@ -23,28 +31,29 @@ function FillBlankGame({ game, currentUser, onFinish, onExit, onReplay }) {
     const startedAt = React.useRef(Date.now());
     const reported = React.useRef(false);
 
-    const score = total === 0 ? 0 : Math.max(0, Math.round((benar / total) * 100 - salah * 5));
+    const score = calcChallengeScore(benar, total, salah, level);
     const theme = (typeof gameTheme === "function" ? gameTheme("fillblank") : { grad: "from-indigo-500 to-sky-500" });
     const timeWarning = timeLeft <= 15 && !finished;
-    const cur = pairs[idx];
+    const cur = roundsArr[idx];
 
     React.useEffect(() => {
-        if (finished) return;
+        if (!level || finished) return;
         const t = setInterval(() => setTimeLeft(prev => (prev <= 1 ? 0 : prev - 1)), 1000);
         return () => clearInterval(t);
-    }, [finished]);
+    }, [finished, level]);
 
     React.useEffect(() => {
-        if (!finished && (idx >= total || timeLeft === 0)) setFinished(true);
-    }, [idx, timeLeft, total, finished]);
+        if (!level || finished || total === 0) return;
+        if (idx >= total || timeLeft === 0) setFinished(true);
+    }, [idx, timeLeft, total, finished, level]);
 
     React.useEffect(() => {
-        if (!finished || reported.current) return;
+        if (!level || !finished || reported.current) return;
         reported.current = true;
         playGameTone(1046, 0.3, "triangle");
         onFinish && onFinish({
             gameId: game.id, title: game.title, mapel: game.mapel, type: "fillblank",
-            skor: score, benar, salah,
+            skor: score, benar, salah, level,
             durasiDetik: Math.round((Date.now() - startedAt.current) / 1000)
         });
     }, [finished]);
@@ -52,7 +61,7 @@ function FillBlankGame({ game, currentUser, onFinish, onExit, onReplay }) {
     const nextQ = () => { setIdx(i => i + 1); setInput(""); setAttempts(0); setRevealed(null); setFlashOk(false); };
 
     const submit = () => {
-        if (finished || !cur || revealed) return;
+        if (!level || finished || !cur || revealed) return;
         if (normAnswer(input) === "") return;
         if (normAnswer(input) === normAnswer(cur.right)) {
             setBenar(v => v + 1);
@@ -66,7 +75,7 @@ function FillBlankGame({ game, currentUser, onFinish, onExit, onReplay }) {
             setSalah(v => v + 1);
             playGameTone(170, 0.25, "sawtooth");
             setShakeKey(k => k + 1);
-            if (att >= 2) {
+            if (att >= maxAttempts) {
                 setRevealed(cur.right);
                 setTimeout(nextQ, 1800);
             }
@@ -74,7 +83,7 @@ function FillBlankGame({ game, currentUser, onFinish, onExit, onReplay }) {
     };
 
     const skip = () => {
-        if (finished || !cur) return;
+        if (!level || finished || !cur) return;
         playGameTone(500, 0.08);
         nextQ();
     };
@@ -83,6 +92,13 @@ function FillBlankGame({ game, currentUser, onFinish, onExit, onReplay }) {
         if (!finished && (benar + salah) > 0 && !window.confirm("Keluar dari game? Progres tidak akan disimpan.")) return;
         onExit();
     };
+
+    if (!level) {
+        return (
+            <DifficultySelect theme={{ ...theme, label: "Isian Singkat", emoji: "✍️" }} mapel={game.mapel} title={game.title}
+                pairCount={pairs.length} banks={levelBankCounts(game)} typeLabel="Isian Singkat" onPick={setLevel} onExit={onExit} />
+        );
+    }
 
     // Render kalimat: ___ jadi slot bergaris.
     const renderClue = (text) => {
@@ -104,25 +120,26 @@ function FillBlankGame({ game, currentUser, onFinish, onExit, onReplay }) {
             <div className="pointer-events-none absolute bottom-8 left-6 text-4xl game-float">✏️</div>
             <div className="pointer-events-none absolute bottom-8 right-6 text-4xl game-float" style={{ animationDelay: "1s" }}>📝</div>
 
-            <GameHud theme={{ ...theme, label: "Isian Singkat", emoji: "✍️" }} mapel={game.mapel} title={game.title} score={score} timeLeft={timeLeft} timeWarning={timeWarning} onExit={handleExit} />
+            <GameHud theme={{ ...theme, label: `Isian Singkat · ${levelLabel(level)}`, emoji: "✍️" }} mapel={game.mapel} title={game.title} score={score} timeLeft={timeLeft} timeWarning={timeWarning} onExit={handleExit} />
 
             <main className="relative flex-1 max-w-2xl mx-auto w-full p-3 sm:p-5 space-y-3">
-                <div className="flex items-center justify-center gap-2 text-xs font-black">
+                <div className="flex items-center justify-center gap-2 text-xs font-black flex-wrap">
                     <span className="px-3 py-1.5 rounded-full bg-white border border-slate-200 text-slate-600">📝 Soal {Math.min(idx + 1, total)}/{total}</span>
+                    <DifficultyBadge level={level} />
                     <span className="px-3 py-1.5 rounded-full bg-emerald-100 text-emerald-700">✅ {benar}</span>
                     <span className={`px-3 py-1.5 rounded-full ${salah ? "bg-rose-100 text-rose-600" : "bg-white text-slate-400 border border-slate-200"}`}>❌ {salah}</span>
                 </div>
                 <div className="flex gap-1">
-                    {pairs.map((_, i) => (
+                    {roundsArr.map((_, i) => (
                         <span key={i} className={`h-1.5 flex-1 rounded-full ${i < idx ? "bg-emerald-400" : i === idx ? "bg-indigo-400" : "bg-white border border-slate-200"}`}></span>
                     ))}
                 </div>
 
                 {cur && !finished && (
-                    <div key={`${idx}-${shakeKey}`} className={`game-card-in bg-white rounded-[1.75rem] border border-white shadow-xl p-5 sm:p-6 relative overflow-hidden ${shakeKey && !flashOk && !revealed ? "" : ""}`}>
+                    <div key={`${idx}-${shakeKey}`} className={`game-card-in bg-white rounded-[1.75rem] border border-white shadow-xl p-5 sm:p-6 relative overflow-hidden`}>
                         <div className={`absolute top-0 left-0 right-0 h-2 bg-gradient-to-r ${theme.grad}`}></div>
                         <div className={`${attempts > 0 && !revealed && !flashOk ? "game-shake" : ""} ${flashOk ? "game-pop" : ""}`}>
-                            <p className="text-[11px] font-black uppercase tracking-widest text-indigo-500">✍️ Lengkapi kalimat ini {attempts > 0 && !revealed ? `(coba lagi! sisa ${2 - attempts}x)` : ""}</p>
+                            <p className="text-[11px] font-black uppercase tracking-widest text-indigo-500">✍️ Lengkapi kalimat ini · Putaran {cur.round}/{DS.rounds} · {maxAttempts - attempts}x coba{attempts > 0 && !revealed ? " (sisa " + (maxAttempts - attempts) + "x)" : ""}</p>
                             <p className="text-xl sm:text-2xl font-black text-slate-900 leading-relaxed mt-2">{renderClue(cur.left)}</p>
                         </div>
                         {flashOk && <p className="text-sm font-black text-emerald-600 mt-2">🎉 Betul! Hebat!</p>}
@@ -131,7 +148,6 @@ function FillBlankGame({ game, currentUser, onFinish, onExit, onReplay }) {
                             <input value={input} onChange={e => setInput(e.target.value)} disabled={!!revealed || flashOk}
                                 onKeyDown={e => { if (e.key === "Enter") submit(); }}
                                 placeholder="Ketik jawaban di sini..."
-                                autoFocus
                                 className="flex-1 px-4 py-3.5 rounded-2xl border-2 border-slate-200 text-base font-bold outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100 disabled:opacity-50" />
                             <button onClick={submit} disabled={!!revealed || flashOk}
                                 className={`px-5 py-3.5 rounded-2xl text-white text-sm font-black shadow-lg transition-all active:scale-95 cursor-pointer bg-gradient-to-r ${theme.grad} hover:brightness-110 disabled:opacity-50`}>
@@ -143,7 +159,7 @@ function FillBlankGame({ game, currentUser, onFinish, onExit, onReplay }) {
                 )}
             </main>
 
-            {finished && <GameResultModal score={score} benar={benar} salah={salah} durasiDetik={Math.round((Date.now() - startedAt.current) / 1000)} playerName={currentUser.name} finishedLabel="Semua terisi! ✍️" onExit={onExit} onReplay={onReplay} />}
+            {finished && <GameResultModal score={score} benar={benar} salah={salah} durasiDetik={Math.round((Date.now() - startedAt.current) / 1000)} playerName={currentUser.name} finishedLabel="Semua terisi! ✍️" level={level} onExit={onExit} onReplay={onReplay} />}
         </div>
     );
 }

@@ -269,11 +269,32 @@
         }
 
         function GameAdminPanelStandalone({ games = [], gameResults = [], exams = [] }) {
-            const [form, setForm] = useState({ id: '', type: 'match', mapel: MAPEL_LIST[0], title: '', duration: 3, linkedExamId: '', pairsText: '[{"left":"Akar","right":"Menyerap air"}]' });
+            const EMPTY_BANK = '[{"left":"Akar","right":"Menyerap air"}]';
+            const [form, setForm] = useState({ id: '', type: 'match', mapel: MAPEL_LIST[0], title: '', duration: 3, linkedExamId: '', pairsMudah: EMPTY_BANK, pairsSedang: EMPTY_BANK, pairsSulit: EMPTY_BANK });
+            const [bankTab, setBankTab] = useState('mudah');
             const [saving, setSaving] = useState(false);
             const [aiFiles, setAiFiles] = useState([]);
             const [aiLoading, setAiLoading] = useState(false);
             const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+            const bankKey = bankTab === 'mudah' ? 'pairsMudah' : bankTab === 'sedang' ? 'pairsSedang' : 'pairsSulit';
+            const bankCounts = (g) => {
+                const p = g.pairs;
+                if (p && typeof p === 'object' && !Array.isArray(p)) {
+                    return `🌱${(p.mudah || []).length} 🔥${(p.sedang || []).length} ⚡${(p.sulit || []).length}`;
+                }
+                return `${(p || []).length} soal (bank sama)`;
+            };
+            const fillBanks = (pairs) => {
+                if (pairs && typeof pairs === 'object' && !Array.isArray(pairs)) {
+                    return {
+                        pairsMudah: JSON.stringify(pairs.mudah || [], null, 1),
+                        pairsSedang: JSON.stringify(pairs.sedang || [], null, 1),
+                        pairsSulit: JSON.stringify(pairs.sulit || [], null, 1)
+                    };
+                }
+                const t = JSON.stringify(pairs || [], null, 1);
+                return { pairsMudah: t, pairsSedang: t, pairsSulit: t };
+            };
             const handleAiFiles = (e) => {
                 const files = Array.from(e.target.files || []);
                 if (!files.length) return;
@@ -291,18 +312,34 @@
                 if (!aiFiles.length) { alert("Unggah materi dulu."); return; }
                 setAiLoading(true);
                 try {
-                    const res = await fetch(WEB_APP_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: "generateGamePairs", files: aiFiles, mapel: form.mapel, gameType: form.type }) });
+                    const res = await fetch(WEB_APP_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: "generateGamePairs", files: aiFiles, mapel: form.mapel, gameType: form.type, gameLevel: bankTab }) });
                     const out = await res.json();
-                    if (out.status === "success" && out.pairs) { set('pairsText', JSON.stringify(out.pairs, null, 1)); alert("AI membuat " + out.pairs.length + " pasangan."); }
+                    if (out.status === "success" && out.pairs) { set(bankKey, JSON.stringify(out.pairs, null, 1)); alert(`AI membuat ${out.pairs.length} soal untuk level ${bankTab}.`); }
                     else throw new Error(out.message || "Gagal");
                 } catch (err) { alert("Gagal generate: " + err.message); }
                 finally { setAiLoading(false); }
             };
+            const copyBankToOthers = () => {
+                const src = form[bankKey];
+                try { JSON.parse(src); } catch (e) { alert("Isi bank ini bukan JSON valid."); return; }
+                setForm(f => ({ ...f, pairsMudah: src, pairsSedang: src, pairsSulit: src }));
+                alert("Isi disalin ke 3 level. Ubah tiap level agar soalnya berbeda!");
+            };
+            const parseBank = (text) => {
+                const t = String(text || "").trim();
+                if (!t) return [];
+                const arr = JSON.parse(t);
+                if (!Array.isArray(arr)) throw new Error("harus array");
+                return arr.filter(p => p && p.left !== undefined && p.right !== undefined);
+            };
             const handleSave = async (e) => {
                 e.preventDefault();
                 let pairs;
-                try { pairs = JSON.parse(form.pairsText); if (!Array.isArray(pairs) || !pairs.length) throw new Error("kosong"); }
-                catch (err) { alert("pairsText harus JSON array valid."); return; }
+                try {
+                    pairs = { mudah: parseBank(form.pairsMudah), sedang: parseBank(form.pairsSedang), sulit: parseBank(form.pairsSulit) };
+                    if (!pairs.mudah.length && !pairs.sedang.length && !pairs.sulit.length) throw new Error("kosong");
+                }
+                catch (err) { alert("Tiap bank harus JSON array valid. Minimal 1 level terisi."); return; }
                 const gid = form.id.trim() || ("game-" + form.type + "-" + Date.now().toString().slice(-5));
                 setSaving(true);
                 try {
@@ -319,16 +356,25 @@
                         <form onSubmit={handleSave} className="p-4 space-y-3">
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                                 <div><label className="block text-xs font-semibold mb-1">ID (opsional)</label><input value={form.id} onChange={e => set('id', e.target.value)} className="w-full p-2 border text-sm" placeholder="match-mtk-02" /></div>
-                                <div><label className="block text-xs font-semibold mb-1">Tipe</label><select value={form.type} onChange={e => set('type', e.target.value)} className="w-full p-2 border text-sm"><option value="match">match</option><option value="memory">memory</option><option value="quizrush">quizrush</option><option value="balloon">balloon</option><option value="scramble">scramble</option><option value="snake">snake</option><option value="truefalse">truefalse</option><option value="hangman">hangman</option><option value="boss">boss</option><option value="sort">sort</option><option value="fillblank">fillblank</option><option value="race">race</option></select></div>
+                                <div><label className="block text-xs font-semibold mb-1">Tipe</label><select value={form.type} onChange={e => set('type', e.target.value)} className="w-full p-2 border text-sm"><option value="match">match</option><option value="memory">memory</option><option value="quizrush">quizrush</option><option value="balloon">balloon</option><option value="scramble">scramble</option><option value="snake">snake</option><option value="truefalse">truefalse</option><option value="hangman">hangman</option><option value="boss">boss</option><option value="sort">sort</option><option value="fillblank">fillblank</option><option value="race">race</option><option value="tower">tower</option><option value="sequence">sequence</option><option value="maze">maze</option><option value="defense">defense</option></select></div>
                                 <div><label className="block text-xs font-semibold mb-1">Mapel</label><select value={form.mapel} onChange={e => set('mapel', e.target.value)} className="w-full p-2 border text-sm">{MAPEL_LIST.map(m => <option key={m} value={m}>{m}</option>)}</select></div>
                                 <div className="md:col-span-2"><label className="block text-xs font-semibold mb-1">Judul</label><input value={form.title} onChange={e => set('title', e.target.value)} className="w-full p-2 border text-sm" /></div>
                                 <div><label className="block text-xs font-semibold mb-1">Durasi</label><input type="number" value={form.duration} onChange={e => set('duration', e.target.value)} className="w-full p-2 border text-sm" /></div>
                                 <div className="md:col-span-3"><label className="block text-xs font-semibold mb-1">Hubungkan ke Tugas</label><select value={form.linkedExamId} onChange={e => set('linkedExamId', e.target.value)} className="w-full p-2 border text-sm"><option value="">-- Bebas --</option>{exams.map(ex => <option key={ex.id} value={ex.id}>{ex.title} ({ex.id})</option>)}</select></div>
                             </div>
-                            <div><label className="block text-xs font-semibold mb-1">Pairs JSON</label><textarea rows="4" value={form.pairsText} onChange={e => set('pairsText', e.target.value)} className="w-full p-2 border text-xs font-mono"></textarea></div>
+                            <div>
+                                <label className="block text-xs font-semibold mb-1">Bank Soal per Level (isi berbeda tiap level!)</label>
+                                <div className="flex gap-1.5 mb-2">
+                                    {[['mudah', '🌱 Mudah'], ['sedang', '🔥 Sedang'], ['sulit', '⚡ Sulit']].map(([k, label]) => (
+                                        <button key={k} type="button" onClick={() => setBankTab(k)} className={`px-3 py-1.5 text-xs font-bold cursor-pointer ${bankTab === k ? 'bg-slate-900 text-white' : 'bg-slate-100'}`}>{label}</button>
+                                    ))}
+                                    <button type="button" onClick={copyBankToOthers} className="ml-auto px-3 py-1.5 text-[11px] font-bold bg-amber-100 text-amber-700 cursor-pointer">📋 Salin ke semua level</button>
+                                </div>
+                                <textarea rows="4" value={form[bankKey]} onChange={e => set(bankKey, e.target.value)} className="w-full p-2 border text-xs font-mono"></textarea>
+                            </div>
                             <div className="flex flex-wrap gap-2 items-center">
                                 <input type="file" multiple onChange={handleAiFiles} className="text-xs" />
-                                <button type="button" onClick={handleGeneratePairs} disabled={aiLoading || !aiFiles.length} className="px-3 py-2 bg-violet-600 text-white text-xs font-bold disabled:bg-gray-400 cursor-pointer">{aiLoading ? "AI..." : "✨ Generate AI"}</button>
+                                <button type="button" onClick={handleGeneratePairs} disabled={aiLoading || !aiFiles.length} className="px-3 py-2 bg-violet-600 text-white text-xs font-bold disabled:bg-gray-400 cursor-pointer">{aiLoading ? "AI..." : `✨ Generate AI (${bankTab})`}</button>
                                 <button type="submit" disabled={saving} className="ml-auto px-4 py-2 bg-emerald-600 text-white text-xs font-bold cursor-pointer">{saving ? "Menyimpan..." : "Simpan Game"}</button>
                             </div>
                         </form>
@@ -338,8 +384,8 @@
                         <div className="p-4 space-y-2">
                             {games.map(g => (
                                 <div key={g.id} className="border p-3 bg-gray-50 flex flex-col sm:flex-row justify-between gap-2">
-                                    <div><h4 className="font-bold text-sm">{g.title} <span className="text-[10px] bg-violet-100 px-2 py-0.5 rounded-full">{g.type}</span></h4><p className="text-xs text-gray-500">{g.id} · {g.mapel} · {(g.pairs || []).length} pasangan{g.linkedExamId ? ` · 🔗 ${g.linkedExamId}` : ""}</p>{topFor(g.id).length > 0 && <p className="text-[11px] text-amber-600">🏆 {topFor(g.id).map(t => `${t.nama}:${t.skor}`).join(" · ")}</p>}</div>
-                                    <button onClick={() => setForm({ id: g.id, type: g.type, mapel: g.mapel, title: g.title, duration: g.duration, linkedExamId: g.linkedExamId || '', pairsText: JSON.stringify(g.pairs || [], null, 1) })} className="px-3 py-1.5 bg-white border text-xs font-bold cursor-pointer self-start">Edit</button>
+                                    <div><h4 className="font-bold text-sm">{g.title} <span className="text-[10px] bg-violet-100 px-2 py-0.5 rounded-full">{g.type}</span></h4><p className="text-xs text-gray-500">{g.id} · {g.mapel} · {bankCounts(g)}{g.linkedExamId ? ` · 🔗 ${g.linkedExamId}` : ""}</p>{topFor(g.id).length > 0 && <p className="text-[11px] text-amber-600">🏆 {topFor(g.id).map(t => `${t.nama}:${t.skor}`).join(" · ")}</p>}</div>
+                                    <button onClick={() => { const b = fillBanks(g.pairs); setForm({ id: g.id, type: g.type, mapel: g.mapel, title: g.title, duration: g.duration, linkedExamId: g.linkedExamId || '', ...b }); setBankTab('mudah'); }} className="px-3 py-1.5 bg-white border text-xs font-bold cursor-pointer self-start">Edit</button>
                                 </div>
                             ))}
                         </div>

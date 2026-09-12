@@ -1,16 +1,27 @@
 // =====================================================================
-// ULAR TANGGA KUIS: lempar dadu, jalan di papan 1-36, jawab soal tiap
-// berhenti. Tangga menaikkan, ular menurunkan. Salah jawab mundur 2.
-// Menang bila mencapai 36. Bonus-only. Soal dari pairs (left=soal).
+// ULAR TANGGA KUIS + LEVEL: lempar dadu, jalan di papan 1-36.
+// 🌱 Ular sedikit, salah mundur 1 · 🔥 ular normal, mundur 2 + timer soal
+// ⚡ ular ekstra, salah mundur 3 + timer ketat. Bonus-only.
 // =====================================================================
 
 const SNAKE_BOARD_N = 36;
-const SNAKE_HEADS = { 26: 8, 33: 19, 30: 13 };   // kepala : ekor
+const SNAKE_HEADS_BASE = { 26: 8, 33: 19, 30: 13 };   // kepala : ekor
+const SNAKE_HEADS_HARD = { 26: 8, 33: 19, 30: 13, 17: 5, 24: 10 }; // +2 ular
 const SNAKE_LADDERS = { 4: 15, 11: 24, 21: 32 }; // bawah : atas
 const DICE_FACES = ["⚀", "⚁", "⚂", "⚃", "⚄", "⚅"];
 
 function SnakeLadderGame({ game, currentUser, onFinish, onExit, onReplay }) {
-    const pairs = game.pairs || [];
+    const pairs = flatPairs(game);
+    const [level, setLevel] = React.useState(null);
+    const DS = diffSettings(level);
+    // Bank soal per level (berbeda tiap level); format lama memakai bank tunggal.
+    const quizBank = React.useMemo(() => {
+        if (!level) return [];
+        return bankForLevel(game, level, DS.rounds);
+    }, [game.id, level]);
+
+    const SNAKE_HEADS = level === "sulit" ? SNAKE_HEADS_HARD : SNAKE_HEADS_BASE;
+    const BACK_STEPS = !level ? 2 : level === "mudah" ? 1 : level === "sedang" ? 2 : 3;
 
     const [pos, setPos] = React.useState(1);
     const [dice, setDice] = React.useState(2);
@@ -22,44 +33,62 @@ function SnakeLadderGame({ game, currentUser, onFinish, onExit, onReplay }) {
     const [salah, setSalah] = React.useState(0);
     const [message, setMessage] = React.useState("Lempar dadunya! 🎲");
     const [timeLeft, setTimeLeft] = React.useState((game.duration || 3) * 60);
+    const [qTime, setQTime] = React.useState(DS.timePerQ || 0);
     const [finished, setFinished] = React.useState(false);
     const startedAt = React.useRef(Date.now());
     const reported = React.useRef(false);
 
-    const score = Math.max(0, Math.round((pos / SNAKE_BOARD_N) * 100) - salah * 3);
+    const score = Math.max(0, Math.round((pos / SNAKE_BOARD_N) * 100) - salah * DS.penalty);
     const theme = (typeof gameTheme === "function" ? gameTheme("snake") : { grad: "from-green-500 to-teal-600" });
     const timeWarning = timeLeft <= 15 && !finished;
 
     React.useEffect(() => {
-        if (finished) return;
+        if (!level || finished) return;
         const t = setInterval(() => setTimeLeft(prev => (prev <= 1 ? 0 : prev - 1)), 1000);
         return () => clearInterval(t);
-    }, [finished]);
+    }, [finished, level]);
 
     React.useEffect(() => {
-        if (!finished && timeLeft === 0) setFinished(true);
-    }, [timeLeft, finished]);
+        if (!level || finished || timeLeft !== 0) return;
+        setFinished(true);
+    }, [timeLeft, finished, level]);
 
     React.useEffect(() => {
-        if (!finished || reported.current) return;
+        if (!level || !finished || reported.current) return;
         reported.current = true;
         if (pos >= SNAKE_BOARD_N) playGameTone(1318, 0.4, "triangle");
         onFinish && onFinish({
             gameId: game.id, title: game.title, mapel: game.mapel, type: "snake",
-            skor: score, benar, salah,
+            skor: score, benar, salah, level,
             durasiDetik: Math.round((Date.now() - startedAt.current) / 1000)
         });
     }, [finished]);
 
+    // Timer kuis per petak (Sedang/Sulit): habis = salah + mundur.
+    React.useEffect(() => {
+        if (!level || finished || phase !== "quiz" || !DS.timePerQ || picked !== null || !quiz) return;
+        if (qTime <= 0) {
+            const back = Math.max(1, pos - BACK_STEPS);
+            setSalah(v => v + 1);
+            setMessage(`⏰ Kehabisan waktu! Mundur ke ${back}.`);
+            playGameTone(170, 0.25, "sawtooth");
+            setTimeout(() => { setPos(back); setQuiz(null); setPhase("roll"); }, 1100);
+            return;
+        }
+        const t = setTimeout(() => setQTime(q => q - 1), 1000);
+        return () => clearTimeout(t);
+    }, [qTime, level, finished, phase, picked, quiz]);
+
     const buildQuiz = (landingPos) => {
-        if (pairs.length === 0) return null;
-        const p = pairs[(landingPos - 1) % pairs.length];
+        const bank = quizBank.length > 0 ? quizBank : pairs;
+        if (bank.length === 0) return null;
+        const p = bank[(landingPos - 1) % bank.length];
         const others = shuffleArray(pairs.filter(o => o.right !== p.right)).slice(0, 3).map(o => o.right);
         return { q: p.left, answer: p.right, options: shuffleArray([p.right, ...others]) };
     };
 
     const rollDice = () => {
-        if (finished || phase !== "roll" || rolling || pairs.length === 0) return;
+        if (!level || finished || phase !== "roll" || rolling || pairs.length === 0) return;
         setRolling(true);
         playGameTone(520, 0.08);
         let ticks = 0;
@@ -113,11 +142,12 @@ function SnakeLadderGame({ game, currentUser, onFinish, onExit, onReplay }) {
         }
         setQuiz(buildQuiz(final));
         setPicked(null);
+        setQTime(diffSettings(level).timePerQ || 0);
         setPhase("quiz");
     };
 
     const answerQuiz = (opt) => {
-        if (finished || phase !== "quiz" || picked !== null || !quiz) return;
+        if (!level || finished || phase !== "quiz" || picked !== null || !quiz) return;
         setPicked(opt);
         if (opt === quiz.answer) {
             setBenar(v => v + 1);
@@ -125,9 +155,9 @@ function SnakeLadderGame({ game, currentUser, onFinish, onExit, onReplay }) {
             playGameTone(880, 0.15);
             setTimeout(() => { setQuiz(null); setPhase("roll"); }, 900);
         } else {
-            const back = Math.max(1, pos - 2);
+            const back = Math.max(1, pos - BACK_STEPS);
             setSalah(v => v + 1);
-            setMessage(`❌ Kurang tepat! Mundur ke ${back}.`);
+            setMessage(`❌ Kurang tepat! Mundur ${BACK_STEPS} ke ${back}.`);
             playGameTone(170, 0.25, "sawtooth");
             setTimeout(() => { setPos(back); setQuiz(null); setPhase("roll"); }, 1100);
         }
@@ -137,6 +167,13 @@ function SnakeLadderGame({ game, currentUser, onFinish, onExit, onReplay }) {
         if (!finished && (benar + salah) > 0 && !window.confirm("Keluar dari game? Progres tidak akan disimpan.")) return;
         onExit();
     };
+
+    if (!level) {
+        return (
+            <DifficultySelect theme={{ ...theme, label: "Ular Tangga", emoji: "🐍" }} mapel={game.mapel} title={game.title}
+                pairCount={pairs.length} banks={levelBankCounts(game)} typeLabel="Ular Tangga" onPick={setLevel} onExit={onExit} />
+        );
+    }
 
     // Papan zigzag: baris bawah ke atas, arah bolak-balik.
     const rows = [];
@@ -152,12 +189,17 @@ function SnakeLadderGame({ game, currentUser, onFinish, onExit, onReplay }) {
             <div className="pointer-events-none absolute -top-20 -left-20 w-72 h-72 rounded-full bg-emerald-300/40 blur-3xl"></div>
             <div className="pointer-events-none absolute top-1/3 -right-24 w-80 h-80 rounded-full bg-teal-300/40 blur-3xl"></div>
 
-            <GameHud theme={{ ...theme, label: "Ular Tangga", emoji: "🐍" }} mapel={game.mapel} title={game.title} score={score} timeLeft={timeLeft} timeWarning={timeWarning} onExit={handleExit} />
+            <GameHud theme={{ ...theme, label: `Ular Tangga · ${levelLabel(level)}`, emoji: "🐍" }} mapel={game.mapel} title={game.title} score={score} timeLeft={timeLeft} timeWarning={timeWarning} onExit={handleExit} />
 
             <main className="relative flex-1 max-w-2xl mx-auto w-full p-3 sm:p-5 space-y-3">
                 <div className="bg-white/90 backdrop-blur rounded-3xl border border-white shadow-lg px-4 py-3 text-center">
                     <p className="text-sm font-black text-slate-800">📣 {message}</p>
-                    <p className="text-[11px] font-bold text-slate-400 mt-0.5">Posisi {pos}/{SNAKE_BOARD_N} · ✅ {benar} · ❌ {salah}</p>
+                    <div className="flex items-center justify-center gap-1.5 mt-1 flex-wrap">
+                        <p className="text-[11px] font-bold text-slate-400">Posisi {pos}/{SNAKE_BOARD_N} · ✅ {benar} · ❌ {salah}</p>
+                        <DifficultyBadge level={level} />
+                        {DS.timePerQ > 0 && phase === "quiz" && <span className={`px-2 py-0.5 rounded-full text-[11px] font-black ${qTime <= 5 ? "bg-red-500 text-white animate-pulse" : "bg-amber-100 text-amber-700"}`}>⏱ {qTime}</span>}
+                    </div>
+                    {level === "sulit" && <p className="text-[11px] font-black text-rose-500 mt-0.5">🐍🐍 Waspada: ular ekstra + mundur {BACK_STEPS} tiap salah!</p>}
                 </div>
 
                 {/* Papan */}
@@ -188,7 +230,7 @@ function SnakeLadderGame({ game, currentUser, onFinish, onExit, onReplay }) {
                 {/* Dadu / Kuis */}
                 {phase === "quiz" && quiz ? (
                     <div key={`q-${pos}-${benar + salah}`} className="game-card-in bg-white rounded-[1.75rem] border border-white shadow-xl p-4 sm:p-5">
-                        <p className="text-[11px] font-black uppercase tracking-widest text-emerald-600">📝 Soal di petak {pos}</p>
+                        <p className="text-[11px] font-black uppercase tracking-widest text-emerald-600">📝 Soal di petak {pos} · salah = mundur {BACK_STEPS}!</p>
                         <h3 className="text-base sm:text-lg font-black text-slate-900 mt-1 mb-3">{quiz.q}</h3>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                             {quiz.options.map((opt, i) => {
@@ -216,7 +258,7 @@ function SnakeLadderGame({ game, currentUser, onFinish, onExit, onReplay }) {
                 )}
             </main>
 
-            {finished && <GameResultModal score={score} benar={benar} salah={salah} durasiDetik={Math.round((Date.now() - startedAt.current) / 1000)} playerName={currentUser.name} finishedLabel={pos >= SNAKE_BOARD_N ? "Kamu mencapai finis! 🏁" : "Waktu habis! ⏰"} onExit={onExit} onReplay={onReplay} />}
+            {finished && <GameResultModal score={score} benar={benar} salah={salah} durasiDetik={Math.round((Date.now() - startedAt.current) / 1000)} playerName={currentUser.name} finishedLabel={pos >= SNAKE_BOARD_N ? "Kamu mencapai finis! 🏁" : "Waktu habis! ⏰"} level={level} onExit={onExit} onReplay={onReplay} />}
         </div>
     );
 }

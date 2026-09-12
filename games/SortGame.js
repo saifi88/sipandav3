@@ -1,7 +1,7 @@
 // =====================================================================
-// SORTIR CEPAT: ketuk benda, lalu ketuk keranjang kategorinya.
-// Keranjang = nilai `right` yang berbeda (maks 4). Tepat +poin, salah −5.
-// Bonus-only. Pas untuk materi klasifikasi (IPAS, dsb).
+// SORTIR CEPAT + LEVEL: ketuk benda, lalu ketuk keranjang kategorinya.
+// 🌱 1 papan · 🔥 2 papan berurutan · ⚡ 3 papan + penalti besar.
+// Keranjang = nilai `right` yang berbeda (maks 4). Bonus-only.
 // =====================================================================
 
 const SORT_BIN_GRADS = [
@@ -13,16 +13,39 @@ const SORT_BIN_GRADS = [
 const SORT_BIN_EMOJI = ["🧺", "🪣", "📦", "🎁"];
 
 function SortGame({ game, currentUser, onFinish, onExit, onReplay }) {
-    const pairs = game.pairs || [];
+    const pairs = flatPairs(game);
+    const [level, setLevel] = React.useState(null);
+    const DS = diffSettings(level);
+    // Bank per level: soal & kategori benar-benar beda tiap level (1 papan).
+    // Format lama: papan diulang per putaran.
+    const isPL = isPerLevelGame(game);
+    const boards = isPL ? 1 : DS.rounds;
 
-    const bins = React.useMemo(() => [...new Set(pairs.map(p => String(p.right)))].slice(0, 4), [game.id]);
-    const items = React.useMemo(() => (
-        shuffleArray(pairs.filter(p => bins.includes(String(p.right)))).slice(0, 12)
-            .map((p, i) => ({ uid: i, text: p.left, cat: String(p.right) }))
-    ), [game.id]);
-    const total = items.length;
+    const levelBank = React.useMemo(() => {
+        if (!level) return [];
+        return bankForLevel(game, level, DS.rounds);
+    }, [game.id, level]);
+    const bankPool = isPL ? levelBank : pairs;
+    const bins = React.useMemo(() => [...new Set(bankPool.map(p => String(p.right)))].slice(0, 4), [game.id, level]);
+    const boardCap = isPL ? 16 : 12;
+    const perBoard = React.useMemo(() => (
+        shuffleArray(bankPool.filter(p => bins.includes(String(p.right)))).slice(0, boardCap).length
+    ), [game.id, level]);
+    const total = (perBoard || 0) * boards;
+
+    const [boardIdx, setBoardIdx] = React.useState(0);
+    const items = React.useMemo(() => {
+        if (!level) return [];
+        const salted = shuffleArray(bankPool.filter(p => bins.includes(String(p.right)))
+            .map((p, i) => ({ ...p, _s: (i * 7 + boardIdx * 13) % 97 })));
+        salted.sort((a, b) => a._s - b._s);
+        return shuffleArray(salted.slice(0, boardCap))
+            .map((p, i) => ({ uid: `${boardIdx}-${i}`, text: p.left, cat: String(p.right) }));
+    }, [game.id, level, boardIdx]);
+    const boardTotal = items.length;
 
     const [placed, setPlaced] = React.useState({});
+    const [doneCount, setDoneCount] = React.useState(0);
     const [selected, setSelected] = React.useState(null);
     const [benar, setBenar] = React.useState(0);
     const [salah, setSalah] = React.useState(0);
@@ -32,41 +55,55 @@ function SortGame({ game, currentUser, onFinish, onExit, onReplay }) {
     const startedAt = React.useRef(Date.now());
     const reported = React.useRef(false);
 
-    const placedCount = Object.keys(placed).length;
-    const score = total === 0 ? 0 : Math.max(0, Math.round((benar / total) * 100 - salah * 5));
+    const placedCount = doneCount + Object.keys(placed).length;
+    const score = calcChallengeScore(benar, total, salah, level);
     const progress = total > 0 ? Math.round((placedCount / total) * 100) : 0;
     const theme = (typeof gameTheme === "function" ? gameTheme("sort") : { grad: "from-teal-500 to-green-600" });
     const timeWarning = timeLeft <= 15 && !finished;
 
     React.useEffect(() => {
-        if (finished) return;
+        if (!level || finished) return;
         const t = setInterval(() => setTimeLeft(prev => (prev <= 1 ? 0 : prev - 1)), 1000);
         return () => clearInterval(t);
-    }, [finished]);
+    }, [finished, level]);
 
     React.useEffect(() => {
-        if (!finished && ((total > 0 && placedCount === total) || timeLeft === 0)) setFinished(true);
-    }, [placedCount, timeLeft, total, finished]);
+        if (!level || finished || total === 0) return;
+        if (placedCount >= total || timeLeft === 0) setFinished(true);
+    }, [placedCount, timeLeft, total, finished, level]);
 
     React.useEffect(() => {
-        if (!finished || reported.current) return;
+        if (!level || !finished || reported.current) return;
         reported.current = true;
         if (placedCount === total) playGameTone(1046, 0.35, "triangle");
         onFinish && onFinish({
             gameId: game.id, title: game.title, mapel: game.mapel, type: "sort",
-            skor: score, benar, salah,
+            skor: score, benar, salah, level,
             durasiDetik: Math.round((Date.now() - startedAt.current) / 1000)
         });
     }, [finished]);
 
     const dropTo = (bin) => {
-        if (finished || selected === null || placed[selected]) return;
+        if (!level || finished || selected === null || placed[selected]) return;
         const item = items.find(it => it.uid === selected);
         if (!item) { setSelected(null); return; }
         if (item.cat === bin) {
-            setPlaced(p => ({ ...p, [selected]: bin }));
+            const np = { ...placed, [selected]: bin };
             setBenar(v => v + 1);
             playGameTone(880, 0.12);
+            if (Object.keys(np).length >= boardTotal && boardTotal > 0) {
+                // Papan selesai → lanjut papan berikutnya (format lama)
+                const newDone = doneCount + boardTotal;
+                setDoneCount(newDone);
+                setPlaced({});
+                setSelected(null);
+                if (!isPL && boardIdx + 1 < DS.rounds) {
+                    setBoardIdx(b => b + 1);
+                    playGameTone(1046, 0.2, "triangle");
+                }
+                return;
+            }
+            setPlaced(np);
         } else {
             setSalah(v => v + 1);
             setShakeBin(bin);
@@ -81,6 +118,13 @@ function SortGame({ game, currentUser, onFinish, onExit, onReplay }) {
         onExit();
     };
 
+    if (!level) {
+        return (
+            <DifficultySelect theme={{ ...theme, label: "Sortir Cepat", emoji: "🧺" }} mapel={game.mapel} title={game.title}
+                pairCount={perBoard || pairs.length} banks={levelBankCounts(game)} typeLabel="Sortir Cepat" onPick={setLevel} onExit={onExit} />
+        );
+    }
+
     const remaining = items.filter(it => !placed[it.uid]);
 
     return (
@@ -88,18 +132,20 @@ function SortGame({ game, currentUser, onFinish, onExit, onReplay }) {
             <div className="pointer-events-none absolute -top-20 -right-20 w-72 h-72 rounded-full bg-emerald-300/40 blur-3xl"></div>
             <div className="pointer-events-none absolute top-1/3 -left-24 w-80 h-80 rounded-full bg-teal-300/40 blur-3xl"></div>
 
-            <GameHud theme={{ ...theme, label: "Sortir Cepat", emoji: "🧺" }} mapel={game.mapel} title={game.title} score={score} timeLeft={timeLeft} timeWarning={timeWarning} onExit={handleExit} />
+            <GameHud theme={{ ...theme, label: `Sortir Cepat · ${levelLabel(level)}`, emoji: "🧺" }} mapel={game.mapel} title={game.title} score={score} timeLeft={timeLeft} timeWarning={timeWarning} onExit={handleExit} />
 
             <div className="relative max-w-3xl mx-auto w-full px-3 sm:px-5 pt-4">
                 <div className="rounded-3xl border border-white/60 bg-white/70 backdrop-blur-xl shadow-lg p-3.5">
-                    <div className="flex items-center justify-between gap-2 text-xs font-black">
+                    <div className="flex items-center justify-between gap-2 text-xs font-black flex-wrap">
                         <span className="px-2.5 py-1.5 rounded-full bg-emerald-100 text-emerald-700">🧺 {placedCount}/{total} tersortir</span>
+                        <DifficultyBadge level={level} />
+                        <span className="px-2.5 py-1.5 rounded-full bg-teal-100 text-teal-700">Papan {Math.min(boardIdx + 1, boards)}/{boards}</span>
                         <span className={`px-2.5 py-1.5 rounded-full ${salah ? "bg-rose-100 text-rose-600" : "bg-slate-100 text-slate-400"}`}>❌ {salah}</span>
                     </div>
                     <div className="mt-2 h-3 rounded-full bg-slate-100 overflow-hidden border border-slate-200/70">
                         <div className={`h-full rounded-full bg-gradient-to-r ${theme.grad} transition-all duration-500`} style={{ width: `${progress}%` }}></div>
                     </div>
-                    <p className="text-[11px] text-slate-500 mt-2 text-center font-semibold">👆 Ketuk benda, lalu ketuk keranjang yang tepat!</p>
+                    <p className="text-[11px] text-slate-500 mt-2 text-center font-semibold">👆 Ketuk benda, lalu ketuk keranjang yang tepat! Salah −{DS.penalty} poin.</p>
                 </div>
             </div>
 
@@ -124,7 +170,7 @@ function SortGame({ game, currentUser, onFinish, onExit, onReplay }) {
                 <div className="bg-white/70 backdrop-blur rounded-[1.75rem] border border-white shadow-lg p-3.5 sm:p-4">
                     <p className="text-[11px] font-black uppercase tracking-widest text-slate-500 mb-2.5">📦 Benda yang belum disortir</p>
                     {remaining.length === 0 ? (
-                        <p className="text-center text-sm font-black text-emerald-600 py-3">🎉 Semua beres!</p>
+                        <p className="text-center text-sm font-black text-emerald-600 py-3">🎉 {boardIdx + 1 < boards ? "Papan beres, lanjut!" : "Semua beres!"}</p>
                     ) : (
                         <div className="flex flex-wrap justify-center gap-2">
                             {remaining.map(it => (
@@ -139,7 +185,7 @@ function SortGame({ game, currentUser, onFinish, onExit, onReplay }) {
                 </div>
             </main>
 
-            {finished && <GameResultModal score={score} benar={benar} salah={salah} durasiDetik={Math.round((Date.now() - startedAt.current) / 1000)} playerName={currentUser.name} finishedLabel={placedCount === total ? "Semua tersortir rapi! 🧺" : "Waktu habis! ⏰"} onExit={onExit} onReplay={onReplay} />}
+            {finished && <GameResultModal score={score} benar={benar} salah={salah} durasiDetik={Math.round((Date.now() - startedAt.current) / 1000)} playerName={currentUser.name} finishedLabel={placedCount === total ? "Semua tersortir rapi! 🧺" : "Waktu habis! ⏰"} level={level} onExit={onExit} onReplay={onReplay} />}
         </div>
     );
 }

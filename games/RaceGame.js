@@ -1,20 +1,23 @@
 // =====================================================================
-// BALAPAN KUIS: jawab benar = mobilmu maju, komputer jalan sendiri.
-// Capai garis finis duluan! Salah jawab tidak memajukan mobil.
-// Bonus-only. Soal dari pairs (opsi seperti kuis cepat).
+// BALAPAN KUIS + LEVEL: jawab benar = mobilmu maju, komputer jalan sendiri.
+// 🌱 1 putaran, komputer santai · 🔥 2 putaran · ⚡ 3 putaran, komputer
+// ngebut + timer per soal + penalti besar. Bonus-only.
 // =====================================================================
 
 function RaceGame({ game, currentUser, onFinish, onExit, onReplay }) {
-    const pairs = game.pairs || [];
-    const total = pairs.length;
+    const pairs = flatPairs(game);
+    const [level, setLevel] = React.useState(null);
+    const DS = diffSettings(level);
 
-    const questions = React.useMemo(() => pairs.map((p, i) => {
-        const others = shuffleArray(pairs.filter((_, j) => j !== i)).slice(0, 3).map(o => o.right);
-        return { q: p.left, answer: p.right, options: shuffleArray([p.right, ...others]) };
-    }), [game.id]);
+    const questions = React.useMemo(() => {
+        if (!level) return [];
+        return buildMCQ(bankForLevel(game, level, DS.rounds), pairs);
+    }, [game.id, level]);
+    const total = questions.length;
 
     const FINISH = Math.max(1, total);
     const totalSecs = (game.duration || 2) * 60;
+    const compBoost = !level ? 1 : level === "mudah" ? 1.15 : level === "sedang" ? 1 : 0.8;
 
     const [idx, setIdx] = React.useState(0);
     const [playerPos, setPlayerPos] = React.useState(0);
@@ -23,51 +26,68 @@ function RaceGame({ game, currentUser, onFinish, onExit, onReplay }) {
     const [salah, setSalah] = React.useState(0);
     const [picked, setPicked] = React.useState(null);
     const [timeLeft, setTimeLeft] = React.useState(totalSecs);
+    const [qTime, setQTime] = React.useState(DS.timePerQ || 0);
     const [finished, setFinished] = React.useState(false);
     const startedAt = React.useRef(Date.now());
     const reported = React.useRef(false);
 
     const playerWon = playerPos >= FINISH;
     const compWon = !playerWon && compPos >= FINISH;
-    const score = Math.max(0, Math.round((playerPos / FINISH) * 100) - salah * 3);
+    const score = calcChallengeScore(playerPos, FINISH, salah, level);
     const theme = (typeof gameTheme === "function" ? gameTheme("race") : { grad: "from-fuchsia-500 to-indigo-600" });
     const timeWarning = timeLeft <= 15 && !finished;
     const cur = questions[idx];
 
-    // Timer + mobil komputer jalan otomatis.
+    React.useEffect(() => { setQTime(diffSettings(level).timePerQ || 0); }, [level]);
+    React.useEffect(() => { if (level) setQTime(diffSettings(level).timePerQ || 0); }, [idx]);
+
+    // Timer + mobil komputer jalan otomatis (makin sulit makin ngebut).
     React.useEffect(() => {
-        if (finished) return;
+        if (!level || finished) return;
         const t = setInterval(() => setTimeLeft(prev => (prev <= 1 ? 0 : prev - 1)), 1000);
         return () => clearInterval(t);
-    }, [finished]);
+    }, [finished, level]);
 
     React.useEffect(() => {
-        if (finished || total === 0) return;
-        const stepMs = (totalSecs * 1000) / (FINISH + 1);
+        if (!level || finished || total === 0) return;
+        const stepMs = (totalSecs * 1000) / (FINISH + 1) * compBoost;
         const c = setInterval(() => setCompPos(p => Math.min(FINISH, p + 1)), stepMs);
         return () => clearInterval(c);
-    }, [finished, total]);
+    }, [finished, total, level]);
 
     React.useEffect(() => {
-        if (!finished && (playerWon || compWon || idx >= total || timeLeft === 0)) {
+        if (!level || finished || !DS.timePerQ || picked !== null || playerWon || compWon) return;
+        if (qTime <= 0) {
+            setSalah(v => v + 1);
+            playGameTone(160, 0.25, "sawtooth");
+            setIdx(i => i + 1);
+            return;
+        }
+        const t = setTimeout(() => setQTime(q => q - 1), 1000);
+        return () => clearTimeout(t);
+    }, [qTime, level, finished, picked, idx]);
+
+    React.useEffect(() => {
+        if (!level || finished || total === 0) return;
+        if (playerWon || compWon || idx >= total || timeLeft === 0) {
             const timer = setTimeout(() => setFinished(true), playerWon ? 900 : 400);
             return () => clearTimeout(timer);
         }
-    }, [playerWon, compWon, idx, timeLeft, finished]);
+    }, [playerWon, compWon, idx, timeLeft, finished, level]);
 
     React.useEffect(() => {
-        if (!finished || reported.current) return;
+        if (!level || !finished || reported.current) return;
         reported.current = true;
         if (playerWon) { playGameTone(1046, 0.2, "triangle"); setTimeout(() => playGameTone(1318, 0.4, "triangle"), 200); }
         onFinish && onFinish({
             gameId: game.id, title: game.title, mapel: game.mapel, type: "race",
-            skor: score, benar, salah,
+            skor: score, benar, salah, level,
             durasiDetik: Math.round((Date.now() - startedAt.current) / 1000)
         });
     }, [finished]);
 
     const answer = (opt) => {
-        if (finished || picked !== null || playerWon || compWon || !cur) return;
+        if (!level || finished || picked !== null || playerWon || compWon || !cur) return;
         setPicked(opt);
         if (opt === cur.answer) {
             setBenar(v => v + 1);
@@ -86,6 +106,13 @@ function RaceGame({ game, currentUser, onFinish, onExit, onReplay }) {
         onExit();
     };
 
+    if (!level) {
+        return (
+            <DifficultySelect theme={{ ...theme, label: "Balapan Kuis", emoji: "🏎️" }} mapel={game.mapel} title={game.title}
+                pairCount={pairs.length} banks={levelBankCounts(game)} typeLabel="Balapan Kuis" onPick={setLevel} onExit={onExit} />
+        );
+    }
+
     const carLeft = (p) => `calc(${(p / FINISH) * 88}% + 4px)`;
 
     return (
@@ -93,9 +120,14 @@ function RaceGame({ game, currentUser, onFinish, onExit, onReplay }) {
             <div className="pointer-events-none absolute top-12 left-8 text-2xl game-float">🌙</div>
             <div className="pointer-events-none absolute top-20 right-10 text-2xl game-float" style={{ animationDelay: "1s" }}>⭐</div>
 
-            <GameHud theme={{ ...theme, label: "Balapan Kuis", emoji: "🏎️" }} mapel={game.mapel} title={game.title} score={score} timeLeft={timeLeft} timeWarning={timeWarning} onExit={handleExit} />
+            <GameHud theme={{ ...theme, label: `Balapan Kuis · ${levelLabel(level)}`, emoji: "🏎️" }} mapel={game.mapel} title={game.title} score={score} timeLeft={timeLeft} timeWarning={timeWarning} onExit={handleExit} />
 
             <main className="relative flex-1 max-w-2xl mx-auto w-full p-3 sm:p-5 space-y-3">
+                <div className="flex items-center justify-center gap-2">
+                    <DifficultyBadge level={level} />
+                    {DS.timePerQ > 0 && <span className={`px-2.5 py-1 rounded-full text-[11px] font-black ${qTime <= 5 ? "bg-red-500 text-white animate-pulse" : "bg-white/15 text-white"}`}>⏱ {qTime} dtk</span>}
+                    {cur && <span className="px-2.5 py-1 rounded-full bg-white/15 text-white text-[11px] font-black">Putaran {cur.round}/{DS.rounds}</span>}
+                </div>
                 {/* Lintasan */}
                 <div className="bg-white/10 backdrop-blur border border-white/20 rounded-[1.75rem] p-4 space-y-3 relative overflow-hidden">
                     <div className="absolute right-3 top-2 bottom-2 w-1 bg-[repeating-linear-gradient(to_bottom,#fff_0_8px,transparent_8px_16px)] opacity-60"></div>
@@ -144,7 +176,7 @@ function RaceGame({ game, currentUser, onFinish, onExit, onReplay }) {
                 )}
             </main>
 
-            {finished && <GameResultModal score={score} benar={benar} salah={salah} durasiDetik={Math.round((Date.now() - startedAt.current) / 1000)} playerName={currentUser.name} finishedLabel={playerWon ? "Kamu memenangkan balapan! 🏆" : compWon ? "Komputer menang! Coba lagi! 🤖" : "Balapan selesai! 🏁"} onExit={onExit} onReplay={onReplay} />}
+            {finished && <GameResultModal score={score} benar={benar} salah={salah} durasiDetik={Math.round((Date.now() - startedAt.current) / 1000)} playerName={currentUser.name} finishedLabel={playerWon ? "Kamu memenangkan balapan! 🏆" : compWon ? "Komputer menang! Coba lagi! 🤖" : "Balapan selesai! 🏁"} level={level} onExit={onExit} onReplay={onReplay} />}
         </div>
     );
 }

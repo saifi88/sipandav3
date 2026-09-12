@@ -1,7 +1,7 @@
 // =====================================================================
-// BALON MELETUS: balon-balon melayang naik membawa jawaban.
-// Letuskan (ketuk) balon yang cocok dengan soal di atas. Bonus-only.
-// Memakai pairs yang sama: left = soal, right = jawaban.
+// BALON MELETUS + LEVEL: letuskan balon jawaban yang benar.
+// 🌱 1 putaran, 4 balon · 🔥 2 putaran, 5 balon, balon lebih cepat
+// ⚡ 3 putaran, 6 balon + timer per soal. Penalti besar. Bonus-only.
 // =====================================================================
 
 const BALLOON_COLORS = [
@@ -14,8 +14,16 @@ const BALLOON_COLORS = [
 ];
 
 function BalloonPopGame({ game, currentUser, onFinish, onExit, onReplay }) {
-    const pairs = game.pairs || [];
-    const total = pairs.length;
+    const pairs = flatPairs(game);
+    const [level, setLevel] = React.useState(null);
+    const DS = diffSettings(level);
+
+    const roundsArr = React.useMemo(() => {
+        if (!level) return [];
+        return bankForLevel(game, level, DS.rounds);
+    }, [game.id, level]);
+    const total = roundsArr.length;
+    const optCount = !level ? 4 : level === "mudah" ? 4 : level === "sedang" ? 5 : 6;
 
     const [idx, setIdx] = React.useState(0);
     const [benar, setBenar] = React.useState(0);
@@ -23,55 +31,75 @@ function BalloonPopGame({ game, currentUser, onFinish, onExit, onReplay }) {
     const [poppedUid, setPoppedUid] = React.useState(null);
     const [wobbleUid, setWobbleUid] = React.useState(null);
     const [timeLeft, setTimeLeft] = React.useState((game.duration || 3) * 60);
+    const [qTime, setQTime] = React.useState(DS.timePerQ || 0);
     const [finished, setFinished] = React.useState(false);
     const startedAt = React.useRef(Date.now());
     const reported = React.useRef(false);
     const lock = React.useRef(false);
 
-    const score = total === 0 ? 0 : Math.max(0, Math.round((benar / total) * 100 - salah * 5));
+    const score = calcChallengeScore(benar, total, salah, level);
     const theme = (typeof gameTheme === "function" ? gameTheme("balloon") : { grad: "from-sky-400 to-indigo-600" });
     const timeWarning = timeLeft <= 15 && !finished;
 
-    const cur = pairs[idx];
+    const cur = roundsArr[idx];
 
-    // Balon untuk ronde ini: 1 jawaban benar + 3 pengecoh, posisi & kecepatan acak.
+    // Balon ronde ini: 1 benar + pengecoh; makin sulit makin banyak & cepat.
     const balloons = React.useMemo(() => {
-        if (!cur) return [];
-        const others = shuffleArray(pairs.filter((_, j) => j !== idx)).slice(0, 3).map(o => o.right);
+        if (!cur || !level) return [];
+        const others = shuffleArray(roundsArr.filter((_, j) => j !== idx).map(o => o.right)
+            .filter((v, i, a) => v !== cur.right && a.indexOf(v) === i)).slice(0, optCount - 1);
+        while (others.length < optCount - 1) others.push(pairs[(idx + others.length + 1) % Math.max(1, pairs.length)]?.right || "?");
+        const speedBoost = level === "mudah" ? 0 : level === "sedang" ? 1.5 : 2.8;
         return shuffleArray([cur.right, ...others]).map((text, i) => ({
             uid: `${idx}-${i}`,
             text,
             correct: text === cur.right,
-            leftPct: 4 + ((i * 23 + (idx * 37)) % 78),
-            dur: 6 + ((i * 1.7 + idx) % 4),
+            leftPct: 4 + ((i * 19 + (idx * 37)) % 78),
+            dur: Math.max(2.6, 6 + ((i * 1.7 + idx) % 4) - speedBoost),
             delay: -((i * 1.3 + idx * 0.7) % 5),
             color: BALLOON_COLORS[(i + idx) % BALLOON_COLORS.length]
         }));
-    }, [idx, game.id]);
+    }, [idx, game.id, level]);
+
+    React.useEffect(() => { setQTime(diffSettings(level).timePerQ || 0); }, [level]);
+    React.useEffect(() => { if (level) setQTime(diffSettings(level).timePerQ || 0); }, [idx]);
 
     React.useEffect(() => {
-        if (finished) return;
+        if (!level || finished) return;
         const t = setInterval(() => setTimeLeft(prev => (prev <= 1 ? 0 : prev - 1)), 1000);
         return () => clearInterval(t);
-    }, [finished]);
+    }, [finished, level]);
 
     React.useEffect(() => {
-        if (!finished && (idx >= total || timeLeft === 0)) setFinished(true);
-    }, [idx, timeLeft, total, finished]);
+        if (!level || finished || !DS.timePerQ || poppedUid) return;
+        if (qTime <= 0) {
+            setSalah(v => v + 1);
+            playGameTone(160, 0.25, "sawtooth");
+            setIdx(i => i + 1);
+            return;
+        }
+        const t = setTimeout(() => setQTime(q => q - 1), 1000);
+        return () => clearTimeout(t);
+    }, [qTime, level, finished, poppedUid, idx]);
 
     React.useEffect(() => {
-        if (!finished || reported.current) return;
+        if (!level || finished || total === 0) return;
+        if (idx >= total || timeLeft === 0) setFinished(true);
+    }, [idx, timeLeft, total, finished, level]);
+
+    React.useEffect(() => {
+        if (!level || !finished || reported.current) return;
         reported.current = true;
         playGameTone(1046, 0.3, "triangle");
         onFinish && onFinish({
             gameId: game.id, title: game.title, mapel: game.mapel, type: "balloon",
-            skor: score, benar, salah,
+            skor: score, benar, salah, level,
             durasiDetik: Math.round((Date.now() - startedAt.current) / 1000)
         });
     }, [finished]);
 
     const pop = (b) => {
-        if (finished || lock.current || poppedUid) return;
+        if (!level || finished || lock.current || poppedUid) return;
         if (b.correct) {
             lock.current = true;
             setPoppedUid(b.uid);
@@ -92,6 +120,13 @@ function BalloonPopGame({ game, currentUser, onFinish, onExit, onReplay }) {
         onExit();
     };
 
+    if (!level) {
+        return (
+            <DifficultySelect theme={{ ...theme, label: "Balon Meletus", emoji: "🎈" }} mapel={game.mapel} title={game.title}
+                pairCount={pairs.length} banks={levelBankCounts(game)} typeLabel="Balon Meletus" onPick={setLevel} onExit={onExit} />
+        );
+    }
+
     return (
         <div className="min-h-screen bg-gradient-to-b from-sky-300 via-sky-200 to-emerald-100 flex flex-col select-none relative overflow-hidden">
             {/* Matahari + awan dekorasi */}
@@ -101,7 +136,7 @@ function BalloonPopGame({ game, currentUser, onFinish, onExit, onReplay }) {
             <div className="pointer-events-none absolute bottom-6 left-8 text-4xl">🌳</div>
             <div className="pointer-events-none absolute bottom-6 right-8 text-4xl">🌳</div>
 
-            <GameHud theme={{ ...theme, label: "Balon Meletus", emoji: "🎈" }} mapel={game.mapel} title={game.title} score={score} timeLeft={timeLeft} timeWarning={timeWarning} onExit={handleExit} />
+            <GameHud theme={{ ...theme, label: `Balon Meletus · ${levelLabel(level)}`, emoji: "🎈" }} mapel={game.mapel} title={game.title} score={score} timeLeft={timeLeft} timeWarning={timeWarning} onExit={handleExit} />
 
             {/* Soal */}
             <div className="relative max-w-2xl mx-auto w-full px-3 sm:px-5 pt-4">
@@ -109,8 +144,13 @@ function BalloonPopGame({ game, currentUser, onFinish, onExit, onReplay }) {
                     <div className={`absolute top-0 left-0 right-0 h-2 bg-gradient-to-r ${theme.grad}`}></div>
                     <p className="text-[11px] font-black uppercase tracking-widest text-sky-500">Soal {Math.min(idx + 1, total)}/{total} · 🎈 Letuskan balon yang benar!</p>
                     <h2 className="text-2xl sm:text-3xl font-black text-slate-900 mt-1">{cur ? cur.left : "…"}</h2>
+                    <div className="flex justify-center items-center gap-1.5 mt-2.5 flex-wrap">
+                        <DifficultyBadge level={level} />
+                        {DS.timePerQ > 0 && <span className={`px-2 py-0.5 rounded-full text-[11px] font-black ${qTime <= 5 ? "bg-red-500 text-white animate-pulse" : "bg-amber-100 text-amber-700"}`}>⏱ {qTime}</span>}
+                        {cur && <span className="px-2 py-0.5 rounded-full bg-sky-100 text-sky-700 text-[11px] font-black">Putaran {cur.round}/{DS.rounds}</span>}
+                    </div>
                     <div className="flex justify-center gap-1.5 mt-2.5">
-                        {pairs.map((_, i) => (
+                        {roundsArr.map((_, i) => (
                             <span key={i} className={`h-2 w-6 rounded-full ${i < idx ? "bg-emerald-400" : i === idx ? "bg-sky-400" : "bg-slate-200"}`}></span>
                         ))}
                     </div>
@@ -141,9 +181,9 @@ function BalloonPopGame({ game, currentUser, onFinish, onExit, onReplay }) {
                 })}
             </main>
 
-            <p className="relative text-center text-[11px] font-bold text-sky-800/70 pb-4">💡 Balon terus naik — ketuk yang jawabannya tepat! Salah ketuk −5 poin.</p>
+            <p className="relative text-center text-[11px] font-bold text-sky-800/70 pb-4">💡 Balon terus naik — ketuk yang jawabannya tepat! Salah ketuk −{DS.penalty} poin.</p>
 
-            {finished && <GameResultModal score={score} benar={benar} salah={salah} durasiDetik={Math.round((Date.now() - startedAt.current) / 1000)} playerName={currentUser.name} finishedLabel="Semua balon meletus! 🎈" onExit={onExit} onReplay={onReplay} />}
+            {finished && <GameResultModal score={score} benar={benar} salah={salah} durasiDetik={Math.round((Date.now() - startedAt.current) / 1000)} playerName={currentUser.name} finishedLabel="Semua balon meletus! 🎈" level={level} onExit={onExit} onReplay={onReplay} />}
         </div>
     );
 }

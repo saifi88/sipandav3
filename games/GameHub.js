@@ -53,11 +53,11 @@ function GameHub({ games, gameResults, currentUser, onPlay, onBack, exams = [], 
                             <Icon name="chevron-left" size={20} />
                         </button>
                         <div className="min-w-0">
-                            <p className="text-[11px] font-black uppercase tracking-[0.2em] text-white/80">Zona Game · Bonus</p>
+                            <p className="text-[11px] font-black uppercase tracking-[0.2em] text-white/80">Zona Game</p>
                             <h2 className="text-2xl sm:text-3xl font-black leading-tight truncate">Hai, {currentUser.name}! 👋</h2>
                         </div>
                     </div>
-                    <p className="text-white/90 text-sm mt-2 max-w-xl font-medium">Pilih petualanganmu, kumpulkan ⭐, dan jadilah juara kelas. Nilai game tidak mengubah nilai tugas.</p>
+                    <p className="text-white/90 text-sm mt-2 max-w-xl font-medium">Pilih game yang akan kamu mainkan, kumpulkan ⭐, dan raih skor tertinggi.</p>
                     <div className="flex flex-wrap items-center gap-2 mt-4">
                         <span className="px-3 py-1.5 rounded-full bg-white/20 backdrop-blur text-xs font-black">🎯 {totalPlayed}/{games.length} dimainkan</span>
                         <span className="px-3 py-1.5 rounded-full bg-white/20 backdrop-blur text-xs font-black">⭐ {totalStars} bintang</span>
@@ -115,7 +115,7 @@ function GameHub({ games, gameResults, currentUser, onPlay, onBack, exams = [], 
                                         <span className="text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full bg-black/25 backdrop-blur">{theme.label}</span>
                                     </div>
                                     <h3 className="relative font-black text-lg leading-snug mt-2.5 pr-16 drop-shadow-sm">{game.title}</h3>
-                                    <p className="relative text-white/85 text-xs mt-1 font-medium">{theme.desc} · {(game.pairs || []).length} pasangan · {game.duration || 3} mnt</p>
+                                    <p className="relative text-white/85 text-xs mt-1 font-medium">{theme.desc} · {(() => { const c = (typeof levelBankCounts === "function" ? levelBankCounts(game) : null); if (c && c.perLevel) return `🌱${c.mudah} 🔥${c.sedang} ⚡${c.sulit} soal`; return `${(game.pairs || []).length} soal dasar`; })()} · {game.duration || 3} mnt · 🌱🔥⚡ 3 level</p>
                                 </div>
                                 <div className="p-4">
                                     {linkedTitle && (

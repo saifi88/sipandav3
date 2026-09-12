@@ -1,15 +1,24 @@
 // =====================================================================
-// TEBAK KATA (HANGMAN RAMAH ANAK): tebak huruf demi huruf.
-// Petunjuk (left) ditampilkan, kata (right) ditebak. 6 balon nyawa —
-// tiap salah satu balon meletus. Habis = kata gagal. Bonus-only.
+// TEBAK KATA + LEVEL (hangman ramah anak): tebak huruf demi huruf.
+// 🌱 8 nyawa + 1 putaran · 🔥 6 nyawa + 2 putaran · ⚡ 4 nyawa +
+// 3 putaran + timer 60 dtk/kata. Penalti besar. Bonus-only.
 // =====================================================================
 
-const HANGMAN_LIVES = 6;
 const HANGMAN_ALPHA = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 
 function HangmanGame({ game, currentUser, onFinish, onExit, onReplay }) {
-    const pairs = game.pairs || [];
-    const total = pairs.length;
+    const pairs = flatPairs(game);
+    const [level, setLevel] = React.useState(null);
+    const DS = diffSettings(level);
+
+    const HANGMAN_LIVES = !level ? 6 : level === "mudah" ? 8 : level === "sedang" ? 6 : 4;
+    const WORD_LIMIT = level === "sulit" ? 60 : 0;
+
+    const roundsArr = React.useMemo(() => {
+        if (!level) return [];
+        return bankForLevel(game, level, DS.rounds);
+    }, [game.id, level]);
+    const total = roundsArr.length;
 
     const [idx, setIdx] = React.useState(0);
     const [benar, setBenar] = React.useState(0);
@@ -17,16 +26,17 @@ function HangmanGame({ game, currentUser, onFinish, onExit, onReplay }) {
     const [guessed, setGuessed] = React.useState([]);
     const [reveal, setReveal] = React.useState(false);
     const [timeLeft, setTimeLeft] = React.useState((game.duration || 3) * 60);
+    const [qTime, setQTime] = React.useState(WORD_LIMIT);
     const [finished, setFinished] = React.useState(false);
     const startedAt = React.useRef(Date.now());
     const reported = React.useRef(false);
     const lock = React.useRef(false);
 
-    const score = total === 0 ? 0 : Math.max(0, Math.round((benar / total) * 100 - salah * 5));
+    const score = calcChallengeScore(benar, total, salah, level);
     const theme = (typeof gameTheme === "function" ? gameTheme("hangman") : { grad: "from-violet-500 to-indigo-600" });
     const timeWarning = timeLeft <= 15 && !finished;
 
-    const cur = pairs[idx];
+    const cur = roundsArr[idx];
     const word = cur ? String(cur.right).toUpperCase() : "";
     const needLetters = word.split("").filter(ch => HANGMAN_ALPHA.includes(ch));
     const uniqueNeed = [...new Set(needLetters)];
@@ -35,32 +45,48 @@ function HangmanGame({ game, currentUser, onFinish, onExit, onReplay }) {
     const solved = uniqueNeed.length > 0 && uniqueNeed.every(l => guessed.includes(l));
 
     React.useEffect(() => {
-        if (finished) return;
+        if (!level || finished) return;
         const t = setInterval(() => setTimeLeft(prev => (prev <= 1 ? 0 : prev - 1)), 1000);
         return () => clearInterval(t);
-    }, [finished]);
+    }, [finished, level]);
 
     React.useEffect(() => {
-        if (!finished && (idx >= total || timeLeft === 0)) setFinished(true);
-    }, [idx, timeLeft, total, finished]);
+        if (!level || finished || total === 0) return;
+        if (idx >= total || timeLeft === 0) setFinished(true);
+    }, [idx, timeLeft, total, finished, level]);
 
     React.useEffect(() => {
-        if (!finished || reported.current) return;
+        if (!level || !finished || reported.current) return;
         reported.current = true;
         playGameTone(1046, 0.3, "triangle");
         onFinish && onFinish({
             gameId: game.id, title: game.title, mapel: game.mapel, type: "hangman",
-            skor: score, benar, salah,
+            skor: score, benar, salah, level,
             durasiDetik: Math.round((Date.now() - startedAt.current) / 1000)
         });
     }, [finished]);
 
-    React.useEffect(() => { setGuessed([]); setReveal(false); lock.current = false; }, [idx]);
+    React.useEffect(() => { setGuessed([]); setReveal(false); lock.current = false; setQTime(WORD_LIMIT); }, [idx, level]);
+
+    // Timer per kata (khusus Sulit): habis = kata gagal.
+    React.useEffect(() => {
+        if (!level || finished || !WORD_LIMIT || solved || reveal) return;
+        if (qTime <= 0) {
+            lock.current = true;
+            setReveal(true);
+            setSalah(v => v + 1);
+            playGameTone(160, 0.25, "sawtooth");
+            setTimeout(() => setIdx(i => i + 1), 1800);
+            return;
+        }
+        const t = setTimeout(() => setQTime(q => q - 1), 1000);
+        return () => clearTimeout(t);
+    }, [qTime, level, finished, solved, reveal, idx]);
 
     const nextWord = () => { setIdx(i => i + 1); };
 
     const guess = (L) => {
-        if (finished || guessed.includes(L) || lock.current || solved || reveal) return;
+        if (!level || finished || guessed.includes(L) || lock.current || solved || reveal) return;
         const g = [...guessed, L];
         setGuessed(g);
         if (needLetters.includes(L)) {
@@ -90,12 +116,19 @@ function HangmanGame({ game, currentUser, onFinish, onExit, onReplay }) {
         onExit();
     };
 
+    if (!level) {
+        return (
+            <DifficultySelect theme={{ ...theme, label: "Tebak Kata", emoji: "🕵️" }} mapel={game.mapel} title={game.title}
+                pairCount={pairs.length} banks={levelBankCounts(game)} typeLabel="Tebak Kata" onPick={setLevel} onExit={onExit} />
+        );
+    }
+
     return (
         <div className="min-h-screen bg-[#f5f3ff] flex flex-col select-none relative overflow-hidden">
             <div className="pointer-events-none absolute -top-20 -right-20 w-72 h-72 rounded-full bg-violet-300/40 blur-3xl"></div>
             <div className="pointer-events-none absolute top-1/3 -left-24 w-80 h-80 rounded-full bg-indigo-300/40 blur-3xl"></div>
 
-            <GameHud theme={{ ...theme, label: "Tebak Kata", emoji: "🕵️" }} mapel={game.mapel} title={game.title} score={score} timeLeft={timeLeft} timeWarning={timeWarning} onExit={handleExit} />
+            <GameHud theme={{ ...theme, label: `Tebak Kata · ${levelLabel(level)}`, emoji: "🕵️" }} mapel={game.mapel} title={game.title} score={score} timeLeft={timeLeft} timeWarning={timeWarning} onExit={handleExit} />
 
             <main className="relative flex-1 max-w-2xl mx-auto w-full p-3 sm:p-5 space-y-3">
                 {/* Nyawa balon */}
@@ -105,13 +138,17 @@ function HangmanGame({ game, currentUser, onFinish, onExit, onReplay }) {
                             <span key={i} className={i < livesLeft ? "" : "grayscale opacity-30"}>{i < livesLeft ? "🎈" : "💥"}</span>
                         ))}
                     </div>
-                    <p className="text-[11px] font-black text-slate-500 mt-1">Kata {Math.min(idx + 1, total)}/{total} · ✅ {benar} kata · ❌ {salah} kata</p>
+                    <div className="flex items-center justify-center gap-1.5 mt-1 flex-wrap">
+                        <p className="text-[11px] font-black text-slate-500">Kata {Math.min(idx + 1, total)}/{total} · ✅ {benar} kata · ❌ {salah} kata</p>
+                        <DifficultyBadge level={level} />
+                        {WORD_LIMIT > 0 && <span className={`px-2 py-0.5 rounded-full text-[11px] font-black ${qTime <= 10 ? "bg-red-500 text-white animate-pulse" : "bg-amber-100 text-amber-700"}`}>⏱ {qTime}</span>}
+                    </div>
                 </div>
 
                 {/* Petunjuk + slot */}
                 <div key={idx} className="game-card-in bg-white rounded-[1.75rem] border border-white shadow-xl p-5 text-center relative overflow-hidden">
                     <div className={`absolute top-0 left-0 right-0 h-2 bg-gradient-to-r ${theme.grad}`}></div>
-                    <p className="text-[11px] font-black uppercase tracking-widest text-violet-500">🕵️ Petunjuk</p>
+                    <p className="text-[11px] font-black uppercase tracking-widest text-violet-500">🕵️ Petunjuk{cur ? ` · Putaran ${cur.round}/${DS.rounds}` : ""}</p>
                     <h2 className="text-lg sm:text-xl font-black text-slate-900 mt-1">{cur ? cur.left : "…"}</h2>
                     <div className="flex flex-wrap justify-center gap-1.5 mt-4">
                         {word.split("").map((ch, i) => {
@@ -149,7 +186,7 @@ function HangmanGame({ game, currentUser, onFinish, onExit, onReplay }) {
                 </div>
             </main>
 
-            {finished && <GameResultModal score={score} benar={benar} salah={salah} durasiDetik={Math.round((Date.now() - startedAt.current) / 1000)} playerName={currentUser.name} finishedLabel="Misi detektif selesai! 🕵️" onExit={onExit} onReplay={onReplay} />}
+            {finished && <GameResultModal score={score} benar={benar} salah={salah} durasiDetik={Math.round((Date.now() - startedAt.current) / 1000)} playerName={currentUser.name} finishedLabel="Misi detektif selesai! 🕵️" level={level} onExit={onExit} onReplay={onReplay} />}
         </div>
     );
 }
